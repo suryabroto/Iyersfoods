@@ -142,7 +142,6 @@
     <div class="topbar">
         <div class="page-title" id="pageTitle">Dashboard</div>
         <div style="display:flex; align-items:center; gap:15px">
-            <button onclick="resetAllData()" style="background:var(--danger); color:white; border:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; text-transform:uppercase">Reset All Data</button>
             <div class="user">Owner<div class="avatar">O</div></div>
         </div>
     </div>
@@ -410,18 +409,19 @@
     </div>
 </div>
 
-
 <script type="module">
-import { db, ref, set, onValue, update, push, get } from "../firebase-config.js";
+import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../firebase-config.js";
 
-// Make functions global for HTML handlers
-Object.assign(window, {
-    nav, resetAllData, loadDateData, openProdModal, closeProdModal, saveProduction,
-    editProd, deleteProd, openClientModal, closeClientModal, saveClient, editClient,
-    deleteClient, renderClients, renderProduction, renderSales, renderDelivery
-});
-
-
+// Expose functions and state to global scope
+function syncWindow() {
+    Object.assign(window, {
+        prodDB, routeDB, clientDB, currentDate,
+        nav, resetAllData, loadDateData, openProdModal, closeProdModal, saveProduction,
+        editProd, deleteProd, openClientModal, closeClientModal, saveClient, editClient,
+        deleteClient, renderClients, renderProduction, renderSales, renderDelivery,
+        updateModalStaff, refreshUI, resetTableFilters
+    });
+}
     /* --- CONSTANTS & CONFIG --- */
     const KEY_PROD = "IYERSFOOD_ERP_V3_3";
     const KEY_ROUTE = "IYERS_ROUTE_V3_1";
@@ -458,16 +458,17 @@ Object.assign(window, {
     let clientDB = []; // Array of Objects: { name, phone, pd, pa }
     let currentDate = new Date().toISOString().split('T')[0];
 
-
     function resetAllData() {
-        if (confirm("⚠️ CAUTION: FULL SYSTEM RESET?\n\nThis will permanently delete ALL PRODUCTION AND DELIVERY LOGS from the entire history.\n\nAre you sure you want to proceed?")) {
-            set(ref(db, 'erpData'), null);
-            set(ref(db, 'routeData'), null);
-            alert("All production and delivery logs have been cleared on Firebase.");
-            location.reload();
+        if (confirm("⚠️ CAUTION: FULL SYSTEM RESET?\n\nThis will permanently delete ALL PRODUCTION AND DELIVERY LOGS from the entire history.\n\nNOTE: YOUR CLIENT REGISTER (1000+ SHOPS) WILL BE PRESERVED.\n\nAre you sure you want to proceed?")) {
+            Promise.all([
+                setDoc(doc(db, "data", "erp"), {}),
+                setDoc(doc(db, "data", "route"), {})
+            ]).then(() => {
+                alert("All logs have been cleared on Firestore. Client register was preserved.");
+                location.reload();
+            }).catch(err => alert("Error clearing data: " + err.message));
         }
     }
-
 
     /* --- INIT --- */
     window.onload = function() {
@@ -494,75 +495,57 @@ Object.assign(window, {
     /* --- DATA LAYER --- */
     function loadDateData() {
         // Sync currentDate with whichever tab is active
+        const prodDateEl = document.getElementById('prodDate');
+        const delDateEl = document.getElementById('delDate');
+        
         if(document.getElementById('prod').classList.contains('active')) {
-            currentDate = document.getElementById('prodDate').value;
+            currentDate = prodDateEl ? prodDateEl.value : currentDate;
         } else if(document.getElementById('del').classList.contains('active')) {
-            currentDate = document.getElementById('delDate').value;
+            currentDate = delDateEl ? delDateEl.value : currentDate;
         } else {
-            currentDate = document.getElementById('prodDate').value || document.getElementById('delDate').value;
+            currentDate = (prodDateEl ? prodDateEl.value : null) || (delDateEl ? delDateEl.value : null) || currentDate;
         }
         
-        if(document.getElementById('prodDate')) document.getElementById('prodDate').value = currentDate;
-        if(document.getElementById('delDate')) document.getElementById('delDate').value = currentDate;
+        if(prodDateEl) prodDateEl.value = currentDate;
+        if(delDateEl) delDateEl.value = currentDate;
         
         resetTableFilters();
+        syncWindow();
         refreshUI();
     }
 
-
     function loadData() {
-        // Sync Production Data
-        onValue(ref(db, 'erpData'), (snapshot) => {
-            prodDB = snapshot.val() || {};
+        // Real-time Production logs
+        onSnapshot(doc(db, "data", "erp"), (snapshot) => {
+            if(snapshot.exists()) prodDB = snapshot.data();
+            syncWindow();
             refreshUI();
         });
         
-        // Sync Delivery Data
-        onValue(ref(db, 'routeData'), (snapshot) => {
-            routeDB = snapshot.val() || {};
+        // Real-time Delivery logs
+        onSnapshot(doc(db, "data", "route"), (snapshot) => {
+            if(snapshot.exists()) routeDB = snapshot.data();
+            syncWindow();
             refreshUI();
         });
         
-        // Sync Client Registry
-        onValue(ref(db, 'clientDB'), (snapshot) => {
-            clientDB = snapshot.val() || [];
-            refreshUI();
-        });
+        loadClients();
     }
     
     function loadClients() {
-        const rawC = localStorage.getItem(KEY_CLIENTS);
-        if(rawC) {
-            clientDB = JSON.parse(rawC);
-        } else {
-            // MIGRATION / SEED
-            // Check if V1 exists
-            const v1 = localStorage.getItem("IYERS_CLIENT_DB_V1");
-            if(v1) {
-                const oldList = JSON.parse(v1);
-                clientDB = oldList.map(name => ({ name: name, phone: "", pd: 45, pa: 55 }));
-            } else {
-                clientDB = [];
-            }
-        }
-
-        // SYNC: Ensure all INITIAL_CLIENTS are present in the DB
-        let changed = false;
-        const existingNames = new Set(clientDB.map(c => c.name.toUpperCase()));
-        
-        INITIAL_CLIENTS.forEach(name => {
-            if(!existingNames.has(name.toUpperCase())) {
-                clientDB.push({ name: name, phone: "", pd: 45, pa: 55 });
-                changed = true;
+        onSnapshot(doc(db, "data", "clients"), (snapshot) => {
+            if(snapshot.exists()) {
+                clientDB = snapshot.data().list || [];
+                syncWindow();
+                refreshUI();
             }
         });
-
-        if(changed || !rawC) saveClients();
     }
 
-
     function saveClients() {
-        set(ref(db, 'clientDB'), clientDB);
+        setDoc(doc(db, "data", "clients"), { list: clientDB })
+            .then(() => console.log("Clients synced to Firestore"))
+            .catch(err => console.error("Client sync failed", err));
     }
 
     function refreshUI() {
@@ -910,7 +893,6 @@ Object.assign(window, {
         document.getElementById('pQty').value = p.qty;
     }
 
-
     function saveProduction() {
         const id = document.getElementById('pId').value;
         const shop = document.getElementById('pShop').value;
@@ -937,14 +919,21 @@ Object.assign(window, {
             prodDB[currentDate].productions.push({ id:newId, shop, staff, product:prod, type, qty, bn });
         }
 
-        set(ref(db, 'erpData'), prodDB);
-        closeProdModal();
+        setDoc(doc(db, "data", "erp"), prodDB)
+            .then(() => {
+                console.log("Production Saved to Firestore");
+                closeProdModal();
+            })
+            .catch(err => {
+                console.error("Prod Save Error", err);
+                alert("Error: Production record not saved. Check rules.");
+            });
     }
 
     function deleteProd(id) {
         if(!confirm("Delete?")) return;
         prodDB[currentDate].productions = prodDB[currentDate].productions.filter(x => x.id !== id);
-        set(ref(db, 'erpData'), prodDB);
+        setDoc(doc(db, "data", "erp"), prodDB);
     }
 
     /* --- DELIVERY REPORT LOGIC --- */

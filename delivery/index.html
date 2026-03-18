@@ -275,9 +275,6 @@
              <li class="nav-item" onclick="switchSection('shops')"><span class="nav-icon">🛒</span> Shop Sales</li>
              <li class="nav-item" onclick="switchSection('tally')"><span class="nav-icon">📝</span> Tally Sheet</li>
         </ul>
-        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1)">
-            <button onclick="resetAllData()" style="background:rgba(239, 68, 68, 0.2); color:#fca5a5; border:1px solid rgba(239, 68, 68, 0.3); padding:10px; border-radius:10px; font-size:11px; font-weight:700; cursor:pointer; text-transform:uppercase; width: 100%; height: auto; box-shadow: none;">Reset All Data</button>
-        </div>
     </nav>
     <main class="main-content">
         <div class="top-bar">
@@ -500,20 +497,10 @@
 </main>
 </div> <!-- End App Wrapper -->
 
-
 <script type="module">
-import { db, ref, set, onValue, update, push, get } from "../firebase-config.js";
+import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../firebase-config.js";
 
-// Make functions global for HTML handlers
-Object.assign(window, {
-    toggleSidebar, switchSection, resetAllData, setCategory, loadDate, setGlobalDriver,
-    fullRender, addTrip, editTrip, deleteTrip, updateShopData, updateCashReceived,
-    toggleShop, toggleCreditDetail, switchTab, renderShops, saveTallyCashInHand,
-    saveTallyDenom, addTallyExpense, deleteTallyExpense, clearTallyExpenses,
-    toggleTallyCollapse, toggleTallyFullDetails, setPayValue, syncRouteData: saveData
-});
-
-
+// syncWindow is defined after all vars/functions - see bottom of script
     /* --- CONFIG --- */
     const DEFAULT_PRICES = { dosa: 45, appam: 55 };
     const DB_KEY = "IYERS_ROUTE_V3_1";
@@ -565,57 +552,71 @@ Object.assign(window, {
     }
 
 
-
     function resetAllData() {
-        if (confirm("⚠️ CAUTION: RESET ALL DATA?\n\nThis will permanently delete all daily logs and delivery records.\n\nAre you sure you want to proceed?")) {
-            set(ref(db, 'routeData'), null);
-            alert("Daily logs have been cleared on Firebase.");
-            location.reload();
+        if (confirm("⚠️ CAUTION: RESET ALL DATA?\n\nThis will permanently delete all daily logs and delivery records.\n\nNOTE: YOUR CLIENT REGISTER (1000+ SHOPS) WILL BE PRESERVED.\n\nAre you sure you want to proceed?")) {
+            setDoc(doc(db, "data", "route"), {})
+                .then(() => alert("Daily logs have been cleared on Firestore. Client register was preserved."))
+                .catch(err => alert("Error resetting data: " + err.message));
         }
     }
 
-
     window.onload = () => {
-        // Initial Data Load
         loadClients();
         loadDataFromFirebase();
 
         const today = new Date().toISOString().split('T')[0];
-        workDate.value = today;
-        workDate.onchange = () => loadDate(workDate.value);
-        activeHub.onchange = fullRender;
+
+        const workDateEl = document.getElementById('workDate');
+        if (workDateEl) {
+            workDateEl.value = today;
+            workDateEl.onchange = () => loadDate(workDateEl.value);
+        }
+
+        const activeHubEl = document.getElementById('activeHub');
+        if (activeHubEl) activeHubEl.onchange = fullRender;
         
         // Setup Trip Edit Mode State
         window.editState = { trip: null };
         
-        // Sync Trip Driver to Global Filter
-        tripDriver.onchange = () => {
-            setGlobalDriver(tripDriver.value);
-            fullRender();
-        };
+        // Sync Trip Driver dropdown to Global Filter
+        const tripDriverEl = document.getElementById('tripDriver');
+        if (tripDriverEl) {
+            tripDriverEl.onchange = () => {
+                setGlobalDriver(tripDriverEl.value);
+                fullRender();
+            };
+        }
+
+        // Expose ALL functions to window so inline onclick/oninput works
+        syncWindow();
+
         loadDate(today);
     };
 
-
     function loadClients() {
-        const clientRef = ref(db, 'clientDB');
-        onValue(clientRef, (snapshot) => {
-            const clients = snapshot.val() || [];
+        const docRef = doc(db, "data", "clients");
+        onSnapshot(docRef, (snapshot) => {
+            if(!snapshot.exists()) return;
+            const clients = snapshot.data().list || [];
             if(clients.length > 0) {
-                SHOP_LIST = clients.map(c => c.name);
+                // Preserve order as it was in V2
+                SHOP_LIST = clients.map(c => typeof c === 'string' ? c : c.name);
                 SHOP_PRICES = {};
                 clients.forEach(c => {
-                    SHOP_PRICES[c.name] = { pd: Number(c.pd), pa: Number(c.pa) };
+                    if(typeof c === 'object') {
+                        SHOP_PRICES[c.name] = { pd: Number(c.pd), pa: Number(c.pa) };
+                    }
                 });
+                syncWindow();
                 fullRender();
             }
         });
         
-        // Migration
-        get(clientRef).then((snapshot) => {
+        // Migration from local if empty
+        getDoc(docRef).then((snapshot) => {
             if(!snapshot.exists()) {
                 const rawClient = localStorage.getItem(CLIENT_DB_KEY);
-                if(rawClient) set(clientRef, JSON.parse(rawClient));
+                if(rawClient) setDoc(docRef, { list: JSON.parse(rawClient) });
             }
         });
     }
@@ -637,18 +638,22 @@ Object.assign(window, {
         });
         
         // Ensure data object exists for the new category/date combo
-        if(!globalDB[selectedDate][currentCategory]) {
-            globalDB[selectedDate][currentCategory] = { trips: [], returns: [], shops: {} };
+        if(selectedDate) {
+            if(!globalDB[selectedDate]) globalDB[selectedDate] = { PACKET: { trips: [], returns: [], shops: {} }, LOOSE: { trips: [], returns: [], shops: {} } };
+            if(!globalDB[selectedDate][currentCategory]) {
+                globalDB[selectedDate][currentCategory] = { trips: [], returns: [], shops: {} };
+            }
+            currentData = globalDB[selectedDate][currentCategory];
+            initShopDataForDate(selectedDate);
         }
-        currentData = globalDB[selectedDate][currentCategory];
-        
-        initShopDataForDate(selectedDate);
+        syncWindow();
         fullRender();
     }
 
     function loadDate(date) {
         selectedDate = date;
-        document.getElementById('dateDisplay').innerText = new Date(date).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+        const disp = document.getElementById('dateDisplay');
+        if (disp) disp.innerText = new Date(date).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
 
         if(!globalDB[date]) {
             globalDB[date] = { 
@@ -667,6 +672,7 @@ Object.assign(window, {
             if(bal !== 0) pastDuesCache[shop] = bal;
         });
 
+        syncWindow();
         fullRender();
     }
 
@@ -676,7 +682,8 @@ Object.assign(window, {
         if(select) select.value = driver;
         
         // Sync the trip form selector too
-        if(tripDriver) tripDriver.value = driver;
+        const td = document.getElementById('tripDriver');
+        if(td) td.value = driver;
         
         fullRender();
     }
@@ -710,35 +717,44 @@ Object.assign(window, {
         }
     }
 
-
     function loadDataFromFirebase() {
-        const routeRef = ref(db, 'routeData');
-        onValue(routeRef, (snapshot) => {
-            const data = snapshot.val();
+        const docRef = doc(db, "data", "route");
+        onSnapshot(docRef, (snapshot) => {
+            if(!snapshot.exists()) return;
+            const data = snapshot.data();
             if(data) {
                 globalDB = data;
                 if(selectedDate) {
-                    currentData = globalDB[selectedDate][currentCategory] || { trips: [], returns: [], shops: {} };
+                    currentData = globalDB[selectedDate]?.[currentCategory] || { trips: [], returns: [], shops: {} };
                     initShopDataForDate(selectedDate);
+                    syncWindow();
                     fullRender();
                 }
             }
+        }, (error) => {
+            console.error("Firestore read error (Route):", error);
         });
 
-        // Migration
-        get(routeRef).then((snapshot) => {
+        getDoc(docRef).then((snapshot) => {
             if(!snapshot.exists()) {
                 const raw = localStorage.getItem(DB_KEY);
                 if(raw) {
                     globalDB = JSON.parse(raw);
                     saveData();
+                    syncWindow();
                 }
             }
         });
     }
 
     function saveData() {
-        set(ref(db, 'routeData'), globalDB);
+        if(!db) return console.error("DB not initialized");
+        setDoc(doc(db, "data", "route"), globalDB)
+            .then(() => console.log("Route Data Saved Success"))
+            .catch(err => {
+                console.error("Route Save Failed", err);
+                alert("Error: Route data failed to sync to Firestore. Check rules.");
+            });
     }
 
     function generateId() { return Date.now().toString(36); }
@@ -820,17 +836,15 @@ Object.assign(window, {
 
     /* --- LOGIC: TRIPS & RETURNS --- */
     function addTrip() {
-        const hub = activeHub.value;
+        const hub = document.getElementById('activeHub').value;
         if(hub === "ALL") return alert("Select a specific Hub");
-        const driver = tripDriver.value;
+        const driver = document.getElementById('tripDriver').value;
         if(!driver) return alert("Select Driver");
-        const dQty = Number(tripDosa.value);
-        const aQty = Number(tripAppam.value);
-        // Allow 0 if editing just to change something else, but generally require input
+        const dQty = Number(document.getElementById('tripDosa').value);
+        const aQty = Number(document.getElementById('tripAppam').value);
         if(dQty === 0 && aQty === 0) return alert("Enter quantity");
 
         if(window.editState && window.editState.trip) {
-            // Update Existing
             const idx = currentData.trips.findIndex(t => t.id === window.editState.trip);
             if(idx !== -1) {
                 currentData.trips[idx] = { ...currentData.trips[idx], hub, driver, dosa: dQty, appam: aQty };
@@ -839,28 +853,28 @@ Object.assign(window, {
                 document.querySelector('.btn-add-trip').style.background = "var(--text-main)";
             }
         } else {
-            // New Entry
             currentData.trips.push({ id: generateId(), hub, driver, dosa: dQty, appam: aQty });
         }
         
-        tripDosa.value = ""; tripAppam.value = ""; saveData(); fullRender();
+        document.getElementById('tripDosa').value = "";
+        document.getElementById('tripAppam').value = "";
+        saveData();
+        fullRender();
     }
 
     function editTrip(id) {
         const t = currentData.trips.find(t => t.id === id);
         if(!t) return;
         
-        activeHub.value = t.hub;
-        tripDriver.value = t.driver;
-        tripDosa.value = t.dosa;
-        tripAppam.value = t.appam;
+        document.getElementById('activeHub').value = t.hub;
+        document.getElementById('tripDriver').value = t.driver;
+        document.getElementById('tripDosa').value = t.dosa;
+        document.getElementById('tripAppam').value = t.appam;
         
         window.editState.trip = id;
         const btn = document.querySelector('.btn-add-trip');
         btn.innerText = "Update Trip";
         btn.style.background = "var(--primary)";
-        
-        // Scroll to form
         btn.scrollIntoView({behavior: "smooth", block: "center"});
     }
 
@@ -871,7 +885,8 @@ Object.assign(window, {
              window.editState.trip = null;
              document.querySelector('.btn-add-trip').innerText = "+ Add Trip";
              document.querySelector('.btn-add-trip').style.background = "var(--text-main)";
-             tripDosa.value = ""; tripAppam.value = "";
+             document.getElementById('tripDosa').value = "";
+             document.getElementById('tripAppam').value = "";
         }
         saveData(); fullRender();
     }
@@ -1151,17 +1166,17 @@ Object.assign(window, {
         });
     }
 
-    function updateExpense(val) {
+    // Simple legacy shims kept for backward compat with old inline calls
+    // The real per-item functions (with index+field args) are defined below
+    function _updateExpenseLegacy(val) {
         currentData.expense = Number(val) || 0;
         saveData();
-        // OPTIMIZATION: Only update totals to keep input focus intact
         updateTallyReconciliationUI();
     }
 
-    function updateExtraIncome(val) {
+    function _updateExtraIncomeLegacy(val) {
         currentData.extraIncome = Number(val) || 0;
         saveData();
-        // OPTIMIZATION: Only update totals to keep input focus intact
         updateTallyReconciliationUI();
     }
     
@@ -1315,7 +1330,7 @@ Object.assign(window, {
     }
 
     function renderLogs() {
-         const filterHub = activeHub.value;
+         const filterHub = (document.getElementById('activeHub') || {value:'ALL'}).value;
          const filterDriver = selectedDriver;
          const fTrips = currentData.trips.filter(t => {
              const hubMatch = filterHub === "ALL" || t.hub === filterHub;
@@ -2072,5 +2087,59 @@ Object.assign(window, {
              </div>
         `;
     }
+
+    // ── SYNC WINDOW ──────────────────────────────────────────────
+    // Defined HERE (after all vars/functions) so closures capture live references.
+    // Called after init and after every state change so window always has fresh handles.
+    function syncWindow() {
+        window.globalDB        = globalDB;
+        window.currentData     = currentData;
+        window.selectedDate    = selectedDate;
+        window.currentCategory = currentCategory;
+        window.selectedDriver  = selectedDriver;
+        window.activeSection   = activeSection;
+        window.SHOP_LIST       = SHOP_LIST;
+        window.SHOP_PRICES     = SHOP_PRICES;
+
+        // UI Actions
+        window.toggleSidebar      = toggleSidebar;
+        window.switchSection      = switchSection;
+        window.resetAllData       = resetAllData;
+        window.setCategory        = setCategory;
+        window.loadDate           = loadDate;
+        window.setGlobalDriver    = setGlobalDriver;
+        window.fullRender         = fullRender;
+        window.renderShops        = renderShops;
+
+        // Trip ops
+        window.addTrip    = addTrip;
+        window.editTrip   = editTrip;
+        window.deleteTrip = deleteTrip;
+
+        // Shop ops
+        window.updateShopData    = updateShopData;
+        window.updateCashReceived = updateCashReceived;
+        window.updateShopBalance  = updateShopBalance;
+        window.toggleShop         = toggleShop;
+        window.toggleCreditDetail = toggleCreditDetail;
+        window.switchTab          = switchTab;
+
+        // Tally / Cash ops
+        window.addExpense        = addExpense;
+        window.updateExpense     = updateExpense;       // per-item (idx, field, val)
+        window.deleteExpense     = deleteExpense;
+        window.addExtraIncome    = addExtraIncome;
+        window.updateExtraIncome = updateExtraIncome;  // per-item (idx, field, val)
+        window.deleteExtraIncome = deleteExtraIncome;
+        window.updateCashInHand  = updateCashInHand;
+        window.updateDenom       = updateDenom;
+
+        // Member logs
+        window.toggleMemberLog = toggleMemberLog;
+
+        // Firebase sync shortcut
+        window.syncRouteData = saveData;
+    }
+
 </script>
 </html>

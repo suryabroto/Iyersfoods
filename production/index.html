@@ -243,9 +243,6 @@
                 <span class="nav-icon">📈</span> Performance
             </li>
         </ul>
-        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1)">
-            <button onclick="resetAllData()" style="background:rgba(239, 68, 68, 0.2); color:#fca5a5; border:1px solid rgba(239, 68, 68, 0.3); padding:10px; border-radius:10px; font-size:11px; font-weight:700; cursor:pointer; text-transform:uppercase; width: 100%; height: auto; box-shadow: none;">Reset All Data</button>
-        </div>
     </nav>
 
     <main class="main-content">
@@ -528,36 +525,8 @@
 
 <datalist id="clientOptions"></datalist>
 
-
 <script type="module">
-import { db, ref, set, onValue, update, push, get } from "../firebase-config.js";
-
-// Make functions global for HTML handlers
-window.toggleSidebar = toggleSidebar;
-window.switchSection = switchSection;
-window.resetAllData = resetAllData;
-window.setProductContext = setProductContext;
-window.setCategory = setCategory;
-window.handleManualBatchChange = handleManualBatchChange;
-window.handleFinishBatch = handleFinishBatch;
-window.handleAddProduction = handleAddProduction;
-window.cancelEditMode = cancelEditMode;
-window.handleAddDelivery = handleAddDelivery;
-window.handleAddReturn = handleAddReturn;
-window.handleSubmitDec = handleSubmitDec;
-window.showStaffDetails = showStaffDetails;
-window.syncShopUI = syncShopUI;
-window.switchDate = switchDate;
-window.editProd = editProd;
-window.deleteProd = deleteProd;
-window.editDel = editDel;
-window.deleteDel = deleteDel;
-window.editDec = editDec;
-window.deleteDec = deleteDec;
-window.editRet = editRet;
-window.deleteRet = deleteRet;
-window.cancelAllEdits = cancelAllEdits;
-
+import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../firebase-config.js";
 
 /* --- CONFIG --- */
 const SHOPS = ["Nettor", "Kannankulangara", "Vadakkekotta"];
@@ -620,96 +589,143 @@ function switchSection(sectionId) {
 }
 
 function resetAllData() {
-    if (confirm("⚠️ CAUTION: RESET ALL DATA?\n\nThis will permanently delete all logs and production records.\n\nNOTE: YOUR CLIENT REGISTER (1000+ SHOPS) WILL BE PRESERVED.\n\nAre you sure you want to proceed?")) {
-        const clientRegistry = localStorage.getItem(CLIENT_DB_KEY);
-        localStorage.clear();
-        if(clientRegistry) localStorage.setItem(CLIENT_DB_KEY, clientRegistry);
-        
-        alert("Daily logs have been cleared. Client register was preserved.");
-        location.reload();
+    if (confirm("⚠️ CAUTION: RESET ALL DATA?\n\nThis will permanently delete all logs and production records.\n\nAre you sure you want to proceed?")) {
+        setDoc(doc(db, "data", "erp"), {})
+            .then(() => alert("Daily logs have been cleared on Firestore."))
+            .catch(err => alert("Error resetting data: " + err.message));
     }
 }
 
+// Function to handle App Initialization
+// Module-level element references
+let activeShop, workDate, retShop, activeStaff, delProdStaff, delStaff, prodQty, delQty, retQty, decCount, decStaff;
 
-window.onload = function() {
-    activeShop.innerHTML = `<option value="ALL">All Shops</option>` + SHOPS.map(s=>`<option value="${s}">${s}</option>`).join("");
-    workDate.value = new Date().toISOString().split("T")[0];
-    workDate.onchange = () => switchDate(workDate.value);
-    activeShop.onchange = syncShopUI;
-    retShop.innerHTML = SHOPS.map(s=>`<option value="${s}">${s}</option>`).join("");
-    
-    // Initial Data Loads from Firebase
+function initApp() {
     loadDataFromStorage();
-    loadClients();
+    
+    activeShop = document.getElementById('activeShop');
+    workDate = document.getElementById('workDate');
+    retShop = document.getElementById('retShop');
+    activeStaff = document.getElementById('activeStaff');
+    delProdStaff = document.getElementById('delProdStaff');
+    delStaff = document.getElementById('delStaff');
+    prodQty = document.getElementById('prodQty');
+    delQty = document.getElementById('delQty');
+    retQty = document.getElementById('retQty');
+    decCount = document.getElementById('decCount');
+    decStaff = document.getElementById('decStaff');
 
+    if (activeShop) {
+        activeShop.innerHTML = `<option value="ALL">All Shops</option>` + SHOPS.map(s=>`<option value="${s}">${s}</option>`).join("");
+        activeShop.onchange = syncShopUI;
+    }
+    
+    if (workDate) {
+        workDate.value = new Date().toISOString().split("T")[0];
+        workDate.onchange = () => switchDate(workDate.value);
+        switchDate(workDate.value);
+    }
+    
+    if (retShop) {
+        retShop.innerHTML = SHOPS.map(s=>`<option value="${s}">${s}</option>`).join("");
+    }
+    
+    loadClients();
     initStaffGrid();
-    switchDate(workDate.value);
     setCategory(currentCategory);
     switchSection('production'); 
-};
-
-
-function resetAllData() {
-    if (confirm("⚠️ CAUTION: RESET ALL DATA?\n\nThis will permanently delete all logs and production records.\n\nAre you sure you want to proceed?")) {
-        set(ref(db, 'erpData'), null);
-        alert("Daily logs have been cleared on Firebase.");
-        location.reload();
-    }
 }
 
+// Module scripts are deferred, so DOM is guaranteed to be ready here
+initApp();
 
-/* --- FIREBASE DATA HANDLING --- */
-function loadDataFromStorage() {
-    const erpRef = ref(db, 'erpData');
-    onValue(erpRef, (snapshot) => {
-        const data = snapshot.val();
-        if(data) {
-            erpData = data;
-            repairData();
-            render();
-        }
+// Use an object to hold state to avoid reference replacement issues
+const state = {
+    erpData,
+    currentDate,
+    currentProduct,
+    currentCategory,
+    activeSection,
+    editState
+};
+
+// Expose proxy-like sync function
+function syncWindow() {
+    Object.assign(window, {
+        erpData, currentDate, currentProduct, currentCategory, activeSection, editState,
+        toggleSidebar, switchSection, resetAllData, loadClients, loadDataFromStorage,
+        saveData, repairData, generateId, getBatchColor, switchDate, cancelAllEdits,
+        setCategory, getBatchKey, getCurrentBatchCode, handleManualBatchChange,
+        handleFinishBatch, setProductContext, syncShopUI, syncDecUI,
+        handleAddProduction, handleAddDelivery, handleAddReturn, handleSubmitDec,
+        editItem, deleteItem, cancelEditMode, initStaffGrid, showStaffStats, render,
+        editProd: (id) => editItem('PROD', id), deleteProd: (id) => deleteItem('PROD', id),
+        editDel: (id) => editItem('DEL', id), deleteDel: (id) => deleteItem('DEL', id),
+        editDec: (id) => editItem('DEC', id), deleteDec: (id) => deleteItem('DEC', id),
+        editRet: (id) => editItem('RET', id), deleteRet: (id) => deleteItem('RET', id)
+    });
+}
+syncWindow();
+
+function loadClients() {
+    const docRef = doc(db, "data", "clients");
+    onSnapshot(docRef, (snapshot) => {
+        if(!snapshot.exists()) return;
+        const list = snapshot.data().list || [];
+        const dl = document.getElementById('clientOptions');
+        if(!dl) return;
+        
+        const clients = list.map(c => typeof c === 'string' ? c : c.name).sort();
+        dl.innerHTML = clients.map(c => `<option value="${c}">`).join("");
     });
 
-    // One-time migration
-    get(erpRef).then((snapshot) => {
+    // Initial check/migration
+    getDoc(docRef).then((snapshot) => {
+        if(!snapshot.exists()) {
+            const rawC = localStorage.getItem(CLIENT_DB_KEY);
+            if(rawC) setDoc(docRef, { list: JSON.parse(rawC) });
+        }
+    });
+}
+
+/* --- DATA HANDLING --- */
+function loadDataFromStorage() {
+    const docRef = doc(db, "data", "erp");
+    onSnapshot(docRef, (snapshot) => {
+        if(!snapshot.exists()) return;
+        const data = snapshot.data();
+        if(data) {
+            erpData = data; 
+            repairData();
+            if(currentDate && !erpData[currentDate]) {
+                erpData[currentDate] = { productions: [], deliveries: [], staffDeclarations: [], returns: [] };
+            }
+            syncWindow();
+            render();
+        }
+    }, (error) => {
+        console.error("Firestore read error:", error);
+    });
+
+    getDoc(docRef).then((snapshot) => {
         if(!snapshot.exists()) {
             const raw = localStorage.getItem(DB_KEY);
             if(raw) {
                 erpData = JSON.parse(raw);
                 saveData();
+                syncWindow();
             }
         }
     });
 }
-
 function saveData() { 
-    set(ref(db, 'erpData'), erpData);
-}
-
-function loadClients() {
-    const clientRef = ref(db, 'clientDB');
-    onValue(clientRef, (snapshot) => {
-        const list = snapshot.val() || [];
-        const dl = document.getElementById('clientOptions');
-        if(!dl) return;
-        
-        // Handle both old array structure and new object structure if dashboard changes it
-        let clients = [];
-        if(Array.isArray(list)) {
-            clients = list.map(c => typeof c === 'string' ? c : c.name).sort();
-        }
-        dl.innerHTML = clients.map(c => `<option value="${c}">`).join("");
-    });
-
-    // Migrate clients
-    get(clientRef).then((snapshot) => {
-        if(!snapshot.exists()) {
-            const rawC = localStorage.getItem(CLIENT_DB_KEY);
-            if(rawC) {
-                set(ref(db, 'clientDB'), JSON.parse(rawC));
-            }
-        }
-    });
+    if(!db) return console.error("DB not initialized");
+    setDoc(doc(db, "data", "erp"), erpData)
+        .then(() => console.log("Firestore save success"))
+        .catch(err => {
+            console.error("Firestore save failed:", err);
+            alert("Error: Data not saved to Firestore. Check rules.");
+        });
 }
 function repairData() {
     for(let d in erpData) {
@@ -740,11 +756,14 @@ function getBatchColor(bn) {
 
 function switchDate(date) {
     currentDate = date;
-    document.getElementById('dateDisplayBadge').innerText = new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const badge = document.getElementById('dateDisplayBadge');
+    if(badge) badge.innerText = new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     if(!erpData[date]) erpData[date] = { productions: [], deliveries: [], staffDeclarations: [], returns: [] };
     cancelAllEdits();
-    document.getElementById('staffDetailsCard').style.display = 'none';
+    const details = document.getElementById('staffDetailsCard');
+    if(details) details.style.display = 'none';
     syncShopUI(); syncDecUI();
+    syncWindow();
 }
 function cancelAllEdits() { cancelEditMode('PROD'); cancelEditMode('DEL'); cancelEditMode('DEC'); cancelEditMode('RET'); }
 
@@ -754,24 +773,24 @@ function setCategory(cat) {
         o.classList.remove('active');
         if(o.dataset.cat === cat) o.classList.add('active');
     });
-    document.getElementById('uiBalLabel').innerText = cat === 'PACKET' ? 'Packet Stock' : 'Loose Stock';
+    const lbl = document.getElementById('uiBalLabel');
+    if(lbl) lbl.innerText = cat === 'PACKET' ? 'Packet Stock' : 'Loose Stock';
     
-    // Toggle Client in Production
     const prodClientWrap = document.getElementById('prodClientWrapper');
     if(prodClientWrap) prodClientWrap.style.display = (cat === 'LOOSE') ? 'block' : 'none';
 
-    // Toggle Client in Dispatch
     const delClientWrap = document.getElementById('delClientWrapper');
     if(delClientWrap) delClientWrap.style.display = (cat === 'LOOSE') ? 'block' : 'none';
 
-    // Toggle Client in Returns & Damages (Only for Loose)
     const retClientWrap = document.getElementById('retClientWrapper');
     if(retClientWrap) retClientWrap.style.display = (cat === 'LOOSE') ? 'block' : 'none';
 
     const retShopWrap = document.getElementById('retShopWrapper');
     if(retShopWrap) retShopWrap.style.display = 'block';
 
-    document.getElementById('staffDetailsCard').style.display = 'none';
+    const details = document.getElementById('staffDetailsCard');
+    if(details) details.style.display = 'none';
+    syncWindow();
     render();
 }
 
