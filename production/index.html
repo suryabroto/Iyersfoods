@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IyersFood – ERP Pro v3.3</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --primary: #4f46e5;
+        --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+        --accent: #0f172a;
+        --accent-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        --danger: #ef4444;
+        --danger-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        --success: #10b981;
+        --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        
+        --bg-body: #f1f5f9;
+        --bg-card: #ffffff;
+        --text-main: #0f172a;
+        --text-muted: #64748b;
+        --border: #e2e8f0;
+        --input-bg: #f8fafc;
+        --radius: 16px;
+    }
+
+    /* --- BASE --- */
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { background-color: var(--bg-body); color: var(--text-main); padding-bottom: 120px; font-size: 14px; }
+    
+    /* --- HEADER --- */
+    header {
+        background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(0,0,0,0.05); padding: 16px 20px; position: sticky; top: 0; z-index: 100;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .brand { font-weight: 800; font-size: 18px; color: var(--primary); }
+    .date-display { font-size: 12px; font-weight: 600; color: var(--text-muted); background: var(--input-bg); padding: 4px 10px; border-radius: 20px; }
+    .container { max-width: 800px; margin: 20px auto; padding: 0 16px; }
+
+    /* --- CARDS & TYPOGRAPHY --- */
+    .card { background: var(--bg-card); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; border: 1px solid var(--border); box-shadow: 0 2px 4px -1px rgba(0,0,0,0.06); }
+    h3 { font-size: 14px; font-weight: 800; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; display:flex; align-items:center; gap:8px; color: var(--text-muted); }
+    
+    /* --- INPUTS --- */
+    .form-group { margin-bottom: 16px; }
+    label { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; display: block; text-transform: uppercase; letter-spacing: 0.5px; }
+    input, select { width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--input-bg); font-weight: 600; font-size:15px; outline:none; transition: all 0.2s; }
+    input:focus, select:focus { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+
+    /* --- TABS & SWITCHES --- */
+    .product-tabs { display: flex; background: #e2e8f0; padding: 4px; border-radius: 14px; margin-bottom: 20px; }
+    .tab-btn { flex: 1; padding: 10px; border: none; background: transparent; border-radius: 10px; font-weight: 700; font-size: 13px; color: var(--text-muted); cursor: pointer; }
+    .tab-btn.active { background: #fff; color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .tab-btn.active[data-prod="APPAM"] { color: #f59e0b; }
+
+    .type-switch { display: flex; gap: 10px; margin-bottom: 16px; }
+    .type-opt { flex: 1; position: relative; }
+    .type-opt input { position: absolute; opacity: 0; }
+    .type-opt span { display: block; text-align: center; padding: 12px; border: 1px solid var(--border); border-radius: 12px; font-weight: 600; color: var(--text-muted); transition: 0.2s; background: var(--input-bg); font-size:13px; }
+    
+    .type-opt input:checked + span { border-color: var(--primary); color: var(--primary); background: #e0e7ff; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.1); }
+    .type-opt.loose input:checked + span { border-color: #f59e0b; color: #f59e0b; background: #fff7ed; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.1); }
+    .type-opt.ret-in input:checked + span { border-color: var(--success); color: var(--success); background: #dcfce7; }
+    .type-opt.ret-out input:checked + span { border-color: var(--danger); color: var(--danger); background: #fee2e2; }
+
+    /* --- BUTTONS (REDESIGNED) --- */
+    button { 
+        width: 100%; height: 50px; border-radius: 12px; border: none; 
+        font-weight: 700; font-size: 15px; letter-spacing: 0.3px; cursor: pointer; 
+        display: flex; justify-content: center; align-items: center; gap: 8px;
+        transition: transform 0.1s, box-shadow 0.2s;
+        color: white;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    button:active { transform: scale(0.98); }
+
+    .btn-save-prod { background: var(--primary-gradient); box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3); }
+    .btn-save-del { background: var(--accent-gradient); box-shadow: 0 4px 10px rgba(15, 23, 42, 0.3); }
+    .btn-save-ret { background: var(--danger-gradient); box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3); }
+    .btn-save-dec { background: var(--success-gradient); box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3); }
+
+    .btn-cancel { 
+        background: white; color: var(--text-muted); border: 1px solid var(--border); 
+        margin-bottom: 12px; height: 44px; box-shadow: none; 
+    }
+
+    /* Mini Action Buttons */
+    .btn-action-group { display: flex; gap: 8px; justify-content: flex-end; }
+    .btn-icon { width: 32px; height: 32px; padding: 0; border-radius: 8px; font-size: 12px; box-shadow: none; color: inherit;}
+    .btn-edit { background: #fff7ed; color: #f59e0b; border: 1px solid #ffedd5; }
+    .btn-del { background: #fef2f2; color: var(--danger); border: 1px solid #fee2e2; }
+
+    /* --- STATS --- */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+    .stat-card { background: #fff; padding: 16px; border-radius: 16px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+    .stat-card::after { content:''; position: absolute; top:0; left:0; width:4px; height:100%; }
+    .stat-card.pk::after { background: var(--primary); }
+    .stat-card.ls::after { background: #f59e0b; }
+    .stat-value { font-size: 22px; font-weight: 800; color: var(--text-main); }
+    .stat-unit { font-size: 12px; opacity: 0.6; }
+
+    /* --- TABLES & CHIPS --- */
+    .table-wrapper { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); background: white; }
+    table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+    th { text-align: left; padding: 12px 14px; background: #f8fafc; font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; }
+    td { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+    
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .bg-pkt { background: #e0e7ff; color: var(--primary); }
+    .bg-ls { background: #fff7ed; color: #f59e0b; }
+    .bg-green { background: #dcfce7; color: #16a34a; }
+    .bg-red { background: #fee2e2; color: #dc2626; }
+
+    .staff-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { padding: 8px 16px; border-radius: 50px; border: 1px solid var(--border); background: white; font-size: 13px; cursor: pointer; }
+    .chip.active { background: var(--text-main); color: white; border-color: var(--text-main); }
+
+    .pulse-border { animation: pulse 1.5s infinite; border-color: #f59e0b !important; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); } 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    /* --- ASYMMETRIC LAYOUT (SIDEBAR) --- */
+    .app-wrapper { display: flex; min-height: 100vh; }
+    
+    .sidebar {
+        width: 260px; background: var(--accent-gradient); color: white;
+        position: fixed; top: 0; left: 0; bottom: 0; z-index: 1000;
+        padding: 24px; display: flex; flex-direction: column; transition: transform 0.3s ease;
+    }
+    
+    .sidebar-brand { font-weight: 800; font-size: 20px; margin-bottom: 40px; color: white; display: flex; align-items: center; gap: 10px; }
+    .sidebar-brand span { color: rgba(255,255,255,0.4); }
+
+    .nav-list { list-style: none; flex: 1; }
+    .nav-item { 
+        padding: 12px 16px; border-radius: 12px; margin-bottom: 8px; cursor: pointer;
+        display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 14px;
+        transition: all 0.2s; color: rgba(255,255,255,0.7);
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.1); color: white; }
+    .nav-item.active { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4); }
+    .nav-icon { font-size: 18px; width: 24px; text-align: center; }
+
+    .main-content { flex: 1; margin-left: 260px; min-width: 0; position: relative; }
+    
+    .top-bar {
+        background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border); padding: 0 16px; position: sticky; top: 0; z-index: 900;
+        display: flex; gap: 8px; align-items: center; justify-content: space-between; height: 64px;
+    }
+
+    /* Unify Switch Styles in Top Bar */
+    .top-bar-switch { display: flex; gap: 2px; background: #e2e8f0; padding: 3px; border-radius: 12px; height: 40px; }
+    .sw-option { 
+        padding: 0 14px; height: 34px; border-radius: 9px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 6px; 
+        font-weight: 700; font-size: 11px; color: var(--text-muted); transition: 0.2s; 
+        white-space: nowrap; border: none; background: transparent;
+    }
+    .sw-option.active { background: white; color: var(--primary); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+    .sw-option[data-cat="LOOSE"].active { color: #f59e0b; }
+    .sw-option[data-prod="APPAM"].active { color: #f59e0b; }
+
+    .shop-select-wrapper select {
+        height: 40px; padding: 0 12px; font-size: 12px; font-weight: 700; border-radius: 12px;
+        border: 1px solid var(--border); background: var(--input-bg); width: 140px;
+        appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
+    }
+
+    .date-pill {
+        background: var(--primary-gradient); color: white; padding: 0 14px; height: 40px;
+        border-radius: 12px; display: flex; align-items: center; gap: 8px;
+        font-weight: 700; font-size: 11px; cursor: pointer; transition: 0.3s;
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2); border: none;
+        position: relative; overflow: hidden;
+    }
+    .date-pill:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(79, 70, 229, 0.3); }
+    
+    #workDate { 
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+        opacity: 0; cursor: pointer; border: none;
+    }
+
+    @media (max-width: 1024px) {
+        .top-bar { gap: 6px; padding: 0 10px; }
+        .sw-option { padding: 0 10px; font-size: 10px; }
+        .shop-select-wrapper select { width: 110px; font-size: 11px; }
+        .date-pill { padding: 0 10px; }
+        .date-pill span:last-child { display: none; } /* Hide emoji on small screens */
+    }
+
+    .hamburger { display: none; background: none; border: none; padding: 8px; cursor: pointer; width: auto; height: auto; box-shadow: none; }
+    .hamburger div { width: 24px; height: 2px; background: var(--text-main); margin: 5px 0; transition: 0.3s; }
+
+    /* Section Visibility */
+    .content-section { display: none; padding: 24px; max-width: 1000px; margin: 0 auto; animation: fadeIn 0.3s ease; }
+    .content-section.active { display: block; }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (max-width: 1024px) {
+        .sidebar { transform: translateX(-100%); width: 280px; }
+        .sidebar.open { transform: translateX(0); }
+        .main-content { margin-left: 0; }
+        .hamburger { display: block; }
+        .sidebar-overlay { 
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
+            background: rgba(0,0,0,0.5); z-index: 999; backdrop-filter: blur(2px);
+        }
+        .sidebar-overlay.show { display: block; }
+    }
+
+    body { background-color: var(--bg-body); color: var(--text-main); font-size: 14px; padding-bottom: 0; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 0; }
+    header { display: none; } /* Hide old header */
+</style>
+</head>
+
+<body>
+
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<div class="app-wrapper">
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-brand">IyersFood<span>.ERP</span></div>
+        <ul class="nav-list">
+            <li class="nav-item active" onclick="switchSection('production')">
+                <span class="nav-icon">🏭</span> Production
+            </li>
+            <li class="nav-item" onclick="switchSection('dispatch')">
+                <span class="nav-icon">🚚</span> Dispatch
+            </li>
+            <li class="nav-item" onclick="switchSection('returns')">
+                <span class="nav-icon">⚠️</span> Returns & Damages
+            </li>
+            <li class="nav-item" onclick="switchSection('declaration')">
+                <span class="nav-icon">📋</span> Daily Declaration
+            </li>
+            <li class="nav-item" onclick="switchSection('performance')">
+                <span class="nav-icon">📈</span> Performance
+            </li>
+        </ul>
+        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1)">
+            <button onclick="resetAllData()" style="background:rgba(239, 68, 68, 0.2); color:#fca5a5; border:1px solid rgba(239, 68, 68, 0.3); padding:10px; border-radius:10px; font-size:11px; font-weight:700; cursor:pointer; text-transform:uppercase; width: 100%; height: auto; box-shadow: none;">Reset All Data</button>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="top-bar">
+            <div style="display:flex; align-items:center; gap:8px">
+                <button class="hamburger" onclick="toggleSidebar()">
+                    <div></div><div></div><div></div>
+                </button>
+                
+                <div class="top-bar-switch product-tabs">
+                    <button class="sw-option tab-btn active" onclick="setProductContext('DOSA')" data-prod="DOSA">DOSA</button>
+                    <button class="sw-option tab-btn" onclick="setProductContext('APPAM')" data-prod="APPAM">APPAM</button>
+                </div>
+            </div>
+
+            <div class="top-bar-switch category-switch">
+                <div class="sw-option cat-option active" onclick="setCategory('PACKET')" data-cat="PACKET">📦 Packet</div>
+                <div class="sw-option cat-option" onclick="setCategory('LOOSE')" data-cat="LOOSE">🥣 Loose</div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:12px">
+                <div class="shop-select-wrapper">
+                    <select id="activeShop"></select>
+                </div>
+                
+                <div class="date-pill">
+                    <span id="dateDisplayBadge">Loading...</span>
+                    <span>📅</span>
+                    <input type="date" id="workDate">
+                </div>
+            </div>
+        </div>
+
+        <div class="container" style="padding: 20px;">
+
+            <!-- Global Stats (Visible in Production/Dispatch) -->
+            <div id="globalStats" class="stats-grid">
+                <div class="stat-card" id="mainStatCard">
+                    <div class="stat-label" id="uiBalLabel">Stock</div>
+                    <div class="stat-value" id="uiBal">0 <span class="stat-unit">L</span></div>
+                    
+                    <div style="display:flex; justify-content:space-between; margin-top:12px; padding-top:12px; border-top:1px dashed #e2e8f0">
+                        <div>
+                            <div style="font-size:10px; color:#64748b; font-weight:700">OPENING</div>
+                            <div id="uiOpen" style="font-size:14px; font-weight:600">0</div>
+                        </div>
+                        <div style="text-align:right">
+                            <div style="font-size:10px; color:#10b981; font-weight:700">PRODUCED</div>
+                            <div id="uiProduced" style="font-size:14px; font-weight:600; color:#10b981">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PRODUCTION SECTION -->
+            <section id="production" class="content-section active">
+                <div class="card" id="formProd">
+                    <h3>Production Entry</h3>
+                    
+                    <div class="batch-control" style="background:#f1f5f9; padding:10px; border-radius:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; border:1px solid var(--border)">
+                        <div style="display:flex; align-items:center; gap:12px">
+                            <div>
+                                <div style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase">Active Batch</div>
+                                <div style="display:flex; align-items:baseline; gap:2px">
+                                    <span id="uibatchPrefix" style="font-size:18px; font-weight:800; color:var(--primary)">-</span>
+                                    <input type="number" id="batchSeqInput" onchange="handleManualBatchChange(this.value)" style="width:45px; border:none; background:transparent; font-size:18px; font-weight:800; color:var(--primary); padding:0; outline:none; border-bottom:2px solid var(--primary); text-align:center" min="1">
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="handleFinishBatch()" style="width:auto; height:36px; font-size:12px; padding:0 16px; background:white; color:var(--text-main); border:1px solid var(--border); box-shadow:0 1px 2px rgba(0,0,0,0.05)">
+                            Finish Batch &#x276F;
+                        </button>
+                    </div>
+
+                    <div class="form-group"><label>Staff Member</label><select id="activeStaff"></select></div>
+                    <div class="form-group" id="prodClientWrapper" style="display:none">
+                        <label>Client</label>
+                        <input type="text" id="prodClient" list="clientOptions" placeholder="Type to search client...">
+                    </div>
+                    <div class="form-group"><label>Quantity Produced (L)</label><input type="number" id="prodQty" placeholder="0"></div>
+                    
+                    <button id="btnProdCancel" class="btn-cancel" onclick="cancelEditMode('PROD')" style="display:none">Cancel Edit</button>
+                    <button id="btnProdAdd" class="btn-save-prod" onclick="handleAddProduction()">
+                        <span>+</span> Save Production
+                    </button>
+                </div>
+
+                <div class="card" style="padding:0; overflow:hidden; border:none; box-shadow:none; background:transparent">
+                    <h3 style="margin:10px 0 10px 4px; font-size:12px">Production Log</h3>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Batch</th><th>Who</th><th>Type</th><th style="text-align:right">Qty</th><th style="text-align:right"></th></tr></thead>
+                            <tbody id="prodLog"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DISPATCH SECTION -->
+            <section id="dispatch" class="content-section">
+                <!-- LOOSE MISMATCH WARNING -->
+                <div id="looseMismatchAlert" style="display:none; background:#fee2e2; border:1px solid #ef4444; color:#b91c1c; padding:12px; border-radius:12px; margin-bottom:20px; font-size:13px; font-weight:600; text-align:center;">
+                    ⚠️ Inventory Discrepancy Found
+                    <div style="font-size:11px; font-weight:400; margin-top:4px">Check if total dispatch exceeds (Opening + Production).</div>
+                </div>
+
+                <!-- PENDING DISPATCH ALERT (Loose Only) -->
+                <div id="looseUndispatchedAlert" style="display:none; background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); color: white; border-radius: 16px; padding: 16px; margin-bottom: 20px; box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3); border: 1px solid rgba(255,255,255,0.1); position: relative; overflow: hidden;">
+                    <div style="position: absolute; right: -20px; top: -20px; font-size: 80px; opacity: 0.1; transform: rotate(15deg);">🚚</div>
+                    <div style="display:flex; align-items:center; gap:16px; position: relative; z-index: 1;">
+                        <div style="background:rgba(255,255,255,0.2); width:48px; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:24px; backdrop-filter: blur(4px);">⚠️</div>
+                        <div style="flex:1">
+                            <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px; opacity: 0.9;">Attention Required</div>
+                            <div style="font-size:15px; font-weight:800; margin-top:2px;">Undispatched Loose Stock</div>
+                            <div id="looseUndispatchedContent" style="margin-top:8px; font-size:13px; font-weight:500; background:rgba(0,0,0,0.1); border-radius:8px; padding:10px;">
+                                <!-- Dynamic Content -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" id="formDel">
+                    <h3>Dispatch Entry</h3>
+                    <div class="form-group"><label>From (Maker)</label><select id="delProdStaff"></select></div>
+                    <div class="form-group"><label>Driver</label><select id="delStaff"><option>Anand</option><option>Renjith</option><option>Aswin</option><option>Sanja</option><option>Retail</option><option>kannankulangara</option><option>vadakkekotta</option></select></div>
+                    <div class="form-group" id="delClientWrapper" style="display:none">
+                        <label>Client</label>
+                        <input type="text" id="delClient" list="clientOptions" placeholder="Type to search client...">
+                    </div>
+                    <div class="form-group"><label>Quantity Dispatched (L)</label><input type="number" id="delQty" placeholder="0"></div>
+                    
+                    <button id="btnDelCancel" class="btn-cancel" onclick="cancelEditMode('DEL')" style="display:none">Cancel Edit</button>
+                    <button id="btnDelAdd" class="btn-save-del" onclick="handleAddDelivery()">
+                        <span>&#x2192;</span> Confirm Dispatch
+                    </button>
+                </div>
+
+                <div class="card" style="padding:0; overflow:hidden; border:none; box-shadow:none; background:transparent">
+                    <h3 style="margin:20px 0 10px 4px; font-size:12px">Dispatch Log</h3>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Type</th><th>From</th><th>To</th><th style="text-align:right">Qty</th><th style="text-align:right"></th></tr></thead>
+                            <tbody id="delLog"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tomorrow's Loose Queue -->
+                <div class="card" id="looseDeliveryLogCard" style="display:none; padding:0; overflow:hidden; border:none; box-shadow:none; background:transparent">
+                    <h3 style="margin:20px 0 10px 4px; font-size:12px; color:#f59e0b">Tomorrow's Loose Deliveries</h3>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Client</th><th style="text-align:right">Qty (L)</th></tr></thead>
+                            <tbody id="looseDeliveryLog"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RETURNS SECTION -->
+            <section id="returns" class="content-section">
+                <div class="card" id="formRet">
+                    <h3>Returns & Damages</h3>
+                    
+                    <div class="type-switch">
+                        <label class="type-opt ret-in">
+                            <input type="radio" name="retAction" value="RETURN" checked>
+                            <span>Unsold Return</span>
+                        </label>
+                        <label class="type-opt ret-out">
+                            <input type="radio" name="retAction" value="DAMAGE">
+                            <span>Waste / Damage</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group" id="retShopWrapper">
+                        <label>Shop</label>
+                        <select id="retShop"></select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Reported By</label>
+                        <select id="retStaff">
+                            <option value="InHouse">In House (Factory)</option>
+                            <option>Anand</option><option>Renjith</option><option>Aswin</option><option>Sanja</option><option>Retail</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" id="retClientWrapper">
+                        <label>Client</label>
+                        <input type="text" id="retClient" list="clientOptions" placeholder="Type to search client...">
+                    </div>
+                    
+                    <div class="form-group"><label>Quantity (L)</label><input type="number" id="retQty" placeholder="0"></div>
+                    
+                    <button id="btnRetCancel" class="btn-cancel" onclick="cancelEditMode('RET')" style="display:none">Cancel</button>
+                    <button id="btnRetAdd" class="btn-save-ret" onclick="handleAddReturn()">
+                        <span>!</span> Record Entry
+                    </button>
+                </div>
+
+                <div class="card" style="padding:0; overflow:hidden; border:none; box-shadow:none; background:transparent">
+                    <h3 style="margin:20px 0 10px 4px; font-size:12px; color:var(--danger)">Returns & Damages Log</h3>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Action</th><th>Item</th><th>Client</th><th></th><th style="text-align:right">Qty</th><th style="text-align:right"></th></tr></thead>
+                            <tbody id="retLog"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DECLARATION SECTION -->
+            <section id="declaration" class="content-section">
+                <div class="card" id="formDec">
+                    <h3>Daily Declaration</h3>
+                    <div class="form-group"><label>Staff Member</label><select id="decStaff"></select></div>
+                    <div class="form-group">
+                        <label>Declared Batches</label>
+                        <input type="number" id="decCount" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+                            <input type="checkbox" id="decAbsent" style="width:20px; height:20px; margin:0"> 
+                            <span style="font-size:13px; font-weight:600; color:var(--danger)">Mark as Absent</span>
+                        </label>
+                    </div>
+                    
+                    <button id="btnDecCancel" class="btn-cancel" onclick="cancelEditMode('DEC')" style="display:none">Cancel</button>
+                    <button class="btn-save-dec" id="btnDecAdd" onclick="handleSubmitDec()">
+                        <span>&#10003;</span> Verify & Save
+                    </button>
+
+                    <div class="table-wrapper" style="margin-top:20px">
+                        <table>
+                            <thead><tr><th>Staff</th><th>Decl</th><th>Real</th><th>Stat</th><th></th></tr></thead>
+                            <tbody id="decLog"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PERFORMANCE SECTION -->
+            <section id="performance" class="content-section">
+                <div class="card">
+                    <h3>Staff Performance</h3>
+                    <div class="staff-chips" id="staffGrid"></div>
+                    <div id="staffDetailsCard" style="display:none; margin-top:20px; background: #f8fafc; padding:16px; border-radius:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+                            <h4 id="sdName">Name</h4><span class="badge" style="background:#e0f2fe; color:#0284c7" id="sdProduct">PROD</span>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px">
+                            <div style="background:white; padding:12px; border-radius:8px; text-align:center; border:1px solid var(--border)">
+                                <div style="font-size:10px; color:var(--text-muted)">BATCHES</div>
+                                <div id="sdBatches" style="font-size:18px; font-weight:700">0</div>
+                            </div>
+                            <div style="background:white; padding:12px; border-radius:8px; text-align:center; border:1px solid var(--border)">
+                                <div style="font-size:10px; color:var(--text-muted)">TOTAL VOLUME</div>
+                                <div id="sdVolume" style="font-size:18px; font-weight:700">0</div>
+                            </div>
+                        </div>
+                        <div id="sdList" style="font-size:13px; color:var(--text-main)"></div>
+                    </div>
+                </div>
+            </section>
+
+        </div> <!-- End of Container -->
+    </main>
+</div> <!-- End of App Wrapper -->
+
+<footer style="text-align:center; padding:30px; color:#94a3b8; font-size:11px; margin-left: 260px;" id="mainFooter">
+    &copy; 2025 IyersFood ERP v3.3
+</footer>
+
+<style>
+@media (max-width: 1024px) {
+    #mainFooter { margin-left: 0; }
+}
+</style>
+
+<datalist id="clientOptions"></datalist>
+
+
+<script type="module">
+import { db, ref, set, onValue, update, push, get } from "../firebase-config.js";
+
+// Make functions global for HTML handlers
+window.toggleSidebar = toggleSidebar;
+window.switchSection = switchSection;
+window.resetAllData = resetAllData;
+window.setProductContext = setProductContext;
+window.setCategory = setCategory;
+window.handleManualBatchChange = handleManualBatchChange;
+window.handleFinishBatch = handleFinishBatch;
+window.handleAddProduction = handleAddProduction;
+window.cancelEditMode = cancelEditMode;
+window.handleAddDelivery = handleAddDelivery;
+window.handleAddReturn = handleAddReturn;
+window.handleSubmitDec = handleSubmitDec;
+window.showStaffDetails = showStaffDetails;
+window.syncShopUI = syncShopUI;
+window.switchDate = switchDate;
+window.editProd = editProd;
+window.deleteProd = deleteProd;
+window.editDel = editDel;
+window.deleteDel = deleteDel;
+window.editDec = editDec;
+window.deleteDec = deleteDec;
+window.editRet = editRet;
+window.deleteRet = deleteRet;
+window.cancelAllEdits = cancelAllEdits;
+
+
+/* --- CONFIG --- */
+const SHOPS = ["Nettor", "Kannankulangara", "Vadakkekotta"];
+const STAFF = {
+  Nettor: ["Geethu", "Sedhu", "Hathika", "Roshna", "Rincy"],
+  Kannankulangara: ["Sreedevi", "Rejitha", "Suma"],
+  Vadakkekotta: ["Remya"]
+};
+const DB_KEY = "IYERSFOOD_ERP_V3_3"; 
+const CLIENT_DB_KEY = "IYERS_CLIENT_DB_V2";
+const empty = `<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;font-size:12px;">No records for this selection</td></tr>`;
+
+/* --- STATE --- */
+let erpData = {};
+let currentDate = "";
+let currentProduct = "DOSA";
+let currentCategory = "PACKET";
+let activeSection = "production";
+let editState = { prod: null, del: null, dec: null, ret: null }; 
+
+function toggleSidebar() {
+    const sb = document.getElementById('sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    sb.classList.toggle('open');
+    overlay.classList.toggle('show');
+}
+
+function switchSection(sectionId) {
+    activeSection = sectionId;
+    
+    // Update Sidebar UI
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.getAttribute('onclick').includes(`'${sectionId}'`)) {
+            item.classList.add('active');
+        }
+    });
+
+    // Update Section Visibility
+    document.querySelectorAll('.content-section').forEach(sec => {
+        sec.classList.remove('active');
+    });
+    document.getElementById(sectionId).classList.add('active');
+
+    // Close Sidebar on Mobile
+    if (window.innerWidth <= 1024) {
+        document.getElementById('sidebar').classList.remove('open');
+        document.querySelector('.sidebar-overlay').classList.remove('show');
+    }
+
+    // Toggle Global Stats Visibility (Only for Production/Dispatch)
+    const stats = document.getElementById('globalStats');
+    if (sectionId === 'production' || sectionId === 'dispatch') {
+        stats.style.display = 'grid';
+    } else {
+        stats.style.display = 'none';
+    }
+
+    render();
+}
+
+function resetAllData() {
+    if (confirm("⚠️ CAUTION: RESET ALL DATA?\n\nThis will permanently delete all logs and production records.\n\nNOTE: YOUR CLIENT REGISTER (1000+ SHOPS) WILL BE PRESERVED.\n\nAre you sure you want to proceed?")) {
+        const clientRegistry = localStorage.getItem(CLIENT_DB_KEY);
+        localStorage.clear();
+        if(clientRegistry) localStorage.setItem(CLIENT_DB_KEY, clientRegistry);
+        
+        alert("Daily logs have been cleared. Client register was preserved.");
+        location.reload();
+    }
+}
+
+
+window.onload = function() {
+    activeShop.innerHTML = `<option value="ALL">All Shops</option>` + SHOPS.map(s=>`<option value="${s}">${s}</option>`).join("");
+    workDate.value = new Date().toISOString().split("T")[0];
+    workDate.onchange = () => switchDate(workDate.value);
+    activeShop.onchange = syncShopUI;
+    retShop.innerHTML = SHOPS.map(s=>`<option value="${s}">${s}</option>`).join("");
+    
+    // Initial Data Loads from Firebase
+    loadDataFromStorage();
+    loadClients();
+
+    initStaffGrid();
+    switchDate(workDate.value);
+    setCategory(currentCategory);
+    switchSection('production'); 
+};
+
+
+function resetAllData() {
+    if (confirm("⚠️ CAUTION: RESET ALL DATA?\n\nThis will permanently delete all logs and production records.\n\nAre you sure you want to proceed?")) {
+        set(ref(db, 'erpData'), null);
+        alert("Daily logs have been cleared on Firebase.");
+        location.reload();
+    }
+}
+
+
+/* --- FIREBASE DATA HANDLING --- */
+function loadDataFromStorage() {
+    const erpRef = ref(db, 'erpData');
+    onValue(erpRef, (snapshot) => {
+        const data = snapshot.val();
+        if(data) {
+            erpData = data;
+            repairData();
+            render();
+        }
+    });
+
+    // One-time migration
+    get(erpRef).then((snapshot) => {
+        if(!snapshot.exists()) {
+            const raw = localStorage.getItem(DB_KEY);
+            if(raw) {
+                erpData = JSON.parse(raw);
+                saveData();
+            }
+        }
+    });
+}
+
+function saveData() { 
+    set(ref(db, 'erpData'), erpData);
+}
+
+function loadClients() {
+    const clientRef = ref(db, 'clientDB');
+    onValue(clientRef, (snapshot) => {
+        const list = snapshot.val() || [];
+        const dl = document.getElementById('clientOptions');
+        if(!dl) return;
+        
+        // Handle both old array structure and new object structure if dashboard changes it
+        let clients = [];
+        if(Array.isArray(list)) {
+            clients = list.map(c => typeof c === 'string' ? c : c.name).sort();
+        }
+        dl.innerHTML = clients.map(c => `<option value="${c}">`).join("");
+    });
+
+    // Migrate clients
+    get(clientRef).then((snapshot) => {
+        if(!snapshot.exists()) {
+            const rawC = localStorage.getItem(CLIENT_DB_KEY);
+            if(rawC) {
+                set(ref(db, 'clientDB'), JSON.parse(rawC));
+            }
+        }
+    });
+}
+function repairData() {
+    for(let d in erpData) {
+        if(!erpData[d]) erpData[d] = {};
+        if(!erpData[d].productions) erpData[d].productions = [];
+        if(!erpData[d].deliveries) erpData[d].deliveries = [];
+        if(!erpData[d].staffDeclarations) erpData[d].staffDeclarations = [];
+        if(!erpData[d].returns) erpData[d].returns = [];
+        if(!erpData[d].batchSeq) erpData[d].batchSeq = {};
+    }
+}
+function generateId() { return Date.now().toString(36) + Math.random().toString(36).substring(2); }
+function getBatchColor(bn) {
+    if(!bn || bn === "-") return { bg: '#f1f5f9', text: '#64748b' };
+    const hash = bn.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const colors = [
+        { bg: '#e0e7ff', text: '#4338ca' }, // Indigo
+        { bg: '#dcfce7', text: '#15803d' }, // Green
+        { bg: '#fee2e2', text: '#b91c1c' }, // Red
+        { bg: '#fef9c3', text: '#a16207' }, // Yellow
+        { bg: '#f3e8ff', text: '#7e22ce' }, // Purple
+        { bg: '#ffedd5', text: '#9a3412' }, // Orange
+        { bg: '#e0f2fe', text: '#0369a1' }, // Blue
+        { bg: '#fae8ff', text: '#a21caf' }  // Pink
+    ];
+    return colors[hash % colors.length];
+}
+
+function switchDate(date) {
+    currentDate = date;
+    document.getElementById('dateDisplayBadge').innerText = new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    if(!erpData[date]) erpData[date] = { productions: [], deliveries: [], staffDeclarations: [], returns: [] };
+    cancelAllEdits();
+    document.getElementById('staffDetailsCard').style.display = 'none';
+    syncShopUI(); syncDecUI();
+}
+function cancelAllEdits() { cancelEditMode('PROD'); cancelEditMode('DEL'); cancelEditMode('DEC'); cancelEditMode('RET'); }
+
+function setCategory(cat) {
+    currentCategory = cat;
+    document.querySelectorAll('.cat-option').forEach(o => {
+        o.classList.remove('active');
+        if(o.dataset.cat === cat) o.classList.add('active');
+    });
+    document.getElementById('uiBalLabel').innerText = cat === 'PACKET' ? 'Packet Stock' : 'Loose Stock';
+    
+    // Toggle Client in Production
+    const prodClientWrap = document.getElementById('prodClientWrapper');
+    if(prodClientWrap) prodClientWrap.style.display = (cat === 'LOOSE') ? 'block' : 'none';
+
+    // Toggle Client in Dispatch
+    const delClientWrap = document.getElementById('delClientWrapper');
+    if(delClientWrap) delClientWrap.style.display = (cat === 'LOOSE') ? 'block' : 'none';
+
+    // Toggle Client in Returns & Damages (Only for Loose)
+    const retClientWrap = document.getElementById('retClientWrapper');
+    if(retClientWrap) retClientWrap.style.display = (cat === 'LOOSE') ? 'block' : 'none';
+
+    const retShopWrap = document.getElementById('retShopWrapper');
+    if(retShopWrap) retShopWrap.style.display = 'block';
+
+    document.getElementById('staffDetailsCard').style.display = 'none';
+    render();
+}
+
+/* --- BATCH MANAGEMENT --- */
+function getBatchKey() {
+    return `${activeShop.value}_${currentProduct}`;
+}
+function getCurrentBatchCode() {
+    const day = erpData[currentDate];
+    if(!day) return "-";
+    if(!day.batchSeq) day.batchSeq = {};
+    
+    const key = getBatchKey();
+    const seq = day.batchSeq[key] || 1;
+    
+    const sCode = activeShop.value.slice(0,1).toUpperCase();
+    const pCode = currentProduct.slice(0,1).toUpperCase(); // D or A
+    
+    return `${sCode}${pCode}-${seq}`;
+}
+function handleManualBatchChange(val) {
+    const shop = activeShop.value;
+    if(shop === "ALL") return;
+    const v = parseInt(val);
+    if(isNaN(v) || v < 1) return;
+    
+    const day = erpData[currentDate];
+    if(!day.batchSeq) day.batchSeq = {};
+    day.batchSeq[getBatchKey()] = v;
+
+    // Dynamically update the batch of the item being edited
+    if(editState.prod) {
+        const item = day.productions.find(p => p.id === editState.prod);
+        if(item) {
+            item.bn = getCurrentBatchCode(); 
+        }
+    }
+    
+    saveData(); render();
+}
+
+function handleFinishBatch() {
+    const shop = activeShop.value;
+    if(shop === "ALL") return alert("Select Shop first");
+    
+    const key = getBatchKey();
+    const day = erpData[currentDate];
+    if(!day.batchSeq) day.batchSeq = {};
+    const curr = day.batchSeq[key] || 1;
+
+    const otherCat = currentCategory === 'PACKET' ? 'LOOSE' : 'PACKET';
+    const msg = `BATCH FUSION: #${curr}\n\nIs this batch finished for BOTH Packet & Loose production?\n\n- Click OK if EVERYTHING is done (Moves to Batch #${curr+1})\n- Click CANCEL to switch to ${otherCat} and continue Batch #${curr}`;
+
+    if (confirm(msg)) {
+        day.batchSeq[key] = curr + 1;
+        saveData();
+        setCategory('PACKET'); // Default next batch to Packet view
+        render();
+    } else {
+        setCategory(otherCat);
+    }
+}
+
+function setProductContext(prod) {
+    currentProduct = prod;
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('active');
+        if(b.dataset.prod === prod) b.classList.add('active');
+    });
+    document.getElementById('staffDetailsCard').style.display = 'none';
+    render();
+}
+
+function syncShopUI() {
+    const shop = activeShop.value;
+    activeStaff.innerHTML = ""; delProdStaff.innerHTML = "";
+    if(shop === "ALL") { render(); return; }
+    if(STAFF[shop]) STAFF[shop].forEach(s => { activeStaff.add(new Option(s, s)); delProdStaff.add(new Option(s, s)); });
+    
+    // Sync Returns Shop if not in ALL mode
+    if(shop !== "ALL") retShop.value = shop;
+
+    syncDecUI(); // Sync Declaration UI as well
+    render(); 
+}
+function syncDecUI() {
+    const shop = activeShop.value;
+    decStaff.innerHTML = "";
+    if(shop === "ALL") return;
+    if(STAFF[shop]) STAFF[shop].forEach(s => decStaff.add(new Option(s, s)));
+}
+
+/* --- MATH --- */
+function calculateDailyMovement(date, shopFilter, productFilter) {
+    let stats = 0;
+    const day = erpData[date];
+    if(!day) return 0;
+
+    function process(arr, typeKey, qtyKey, isAdd) {
+        arr.forEach(item => {
+            if(item.product !== productFilter) return;
+            if(shopFilter !== "ALL" && item.shop !== shopFilter) return;
+            
+            let t = item[typeKey]; 
+            if(typeKey === 'ret') t = item.stockType;
+            
+            if(t !== currentCategory) return;
+
+            let q = item[qtyKey] || 0;
+            
+            if(typeKey === 'ret') {
+                if(item.action === 'RETURN') stats += q; 
+                else stats -= q; 
+                return;
+            }
+
+            if(isAdd) stats += q;
+            else stats -= q;
+        });
+    }
+
+    process(day.productions, 'type', 'qty', true);
+    process(day.deliveries, 'type', 'qty', false);
+    process(day.returns, 'ret', 'qty', true); 
+
+    return stats;
+}
+
+function getOpeningBalance(dateLimit, shop, product) {
+    let total = 0;
+    Object.keys(erpData).forEach(d => {
+        if(d < dateLimit) {
+            total += calculateDailyMovement(d, shop, product);
+        }
+    });
+    return total;
+}
+
+function getClientBalances(dateLimit, shop, product) {
+    const balances = {};
+    const dates = Object.keys(erpData).sort();
+    dates.forEach(d => {
+        if (d > dateLimit) return;
+        const day = erpData[d];
+        if (!day) return;
+        const isToday = (d === dateLimit);
+        const getB = (c) => {
+            const name = c || 'Unknown';
+            if (!balances[name]) balances[name] = { opening: 0, prod: 0, disp: 0, ret: 0, dmg: 0 };
+            return balances[name];
+        };
+        (day.productions || []).forEach(p => {
+            if (p.product === product && (shop === "ALL" || p.shop === shop) && p.type === 'LOOSE') {
+                const b = getB(p.client);
+                if (isToday) b.prod += (p.qty || 0);
+                else b.opening += (p.qty || 0);
+            }
+        });
+        (day.deliveries || []).forEach(del => {
+            if (del.product === product && (shop === "ALL" || del.shop === shop) && del.type === 'LOOSE') {
+                const b = getB(del.client);
+                if (isToday) b.disp += (del.qty || 0);
+                else b.opening -= (del.qty || 0);
+            }
+        });
+        (day.returns || []).forEach(r => {
+            if (r.product === product && (shop === "ALL" || r.shop === shop) && r.stockType === 'LOOSE') {
+                const b = getB(r.client);
+                const val = r.qty || 0;
+                if (isToday) {
+                    if (r.action === 'RETURN') b.ret += val;
+                    else b.dmg += val;
+                } else {
+                    if (r.action === 'RETURN') b.opening += val;
+                    else b.opening -= val;
+                }
+            }
+        });
+    });
+    return balances;
+}
+
+/* --- ACTIONS --- */
+function handleAddProduction() {
+    const shop = activeShop.value;
+    if(shop === "ALL") return alert("Select Shop");
+    const qty = Number(prodQty.value);
+    if(qty <= 0) return;
+    const type = currentCategory;
+    
+    // Client handling for Loose
+    let client = "";
+    if(type === 'LOOSE') {
+        const cEl = document.getElementById('prodClient');
+        if(cEl && cEl.value) client = cEl.value;
+        if(!client) return alert("Please select a Client for Loose production.");
+    }
+
+    const day = erpData[currentDate];
+    if(!day.batchSeq) day.batchSeq = {}; // Ensure init
+
+    // Use Active Batch Code
+    const batchName = getCurrentBatchCode(); 
+
+    if(editState.prod) {
+        const idx = day.productions.findIndex(p => p.id === editState.prod);
+        if(idx !== -1) day.productions[idx] = { ...day.productions[idx], shop, staff: activeStaff.value, type, qty, client, bn: batchName };
+        cancelEditMode('PROD');
+    } else {
+        day.productions.push({ id: generateId(), shop, staff: activeStaff.value, product: currentProduct, type, qty, bn: batchName, client });
+    }
+    prodQty.value = ""; if(document.getElementById('prodClient')) document.getElementById('prodClient').value = "";
+    saveData(); render();
+}
+
+function handleAddDelivery() {
+    const shop = activeShop.value;
+    if(shop === "ALL") return alert("Select Shop");
+    const qty = Number(delQty.value);
+    if(qty <= 0) return;
+    const type = currentCategory;
+    const day = erpData[currentDate];
+
+    let client = "";
+    if(type === 'LOOSE') {
+         const cEl = document.getElementById('delClient');
+         if(cEl && cEl.value) client = cEl.value;
+    }
+
+    if(editState.del) {
+        const idx = day.deliveries.findIndex(d => d.id === editState.del);
+        if(idx !== -1) day.deliveries[idx] = { ...day.deliveries[idx], shop, type, productionStaff: delProdStaff.value, deliveryStaff: delStaff.value, client, qty };
+        cancelEditMode('DEL');
+    } else {
+        day.deliveries.push({ id: generateId(), shop, product: currentProduct, type, productionStaff: delProdStaff.value, deliveryStaff: delStaff.value, client, qty });
+    }
+    delQty.value = ""; if(document.getElementById('delClient')) document.getElementById('delClient').value = "";
+    saveData(); render();
+}
+
+function handleAddReturn() {
+    const shop = retShop.value;
+    if(!shop) return alert("Select Shop");
+    const qty = Number(retQty.value);
+    if(qty <= 0) return;
+    
+    const action = document.querySelector('input[name="retAction"]:checked').value;
+    const type = currentCategory;
+    const client = document.getElementById('retClient').value;
+    
+    // Client is optional for Packet but encouraged, mandatory for Loose if user prefers
+    if(type === 'LOOSE' && !client) return alert("Please select a Client for Loose items");
+    
+    const day = erpData[currentDate];
+
+    if(editState.ret) {
+        const idx = day.returns.findIndex(r => r.id === editState.ret);
+        if(idx !== -1) day.returns[idx] = { ...day.returns[idx], shop, action, stockType: type, staff: retStaff.value, client, qty };
+        cancelEditMode('RET');
+    } else {
+        day.returns.push({ id: generateId(), shop, product: currentProduct, action, stockType: type, staff: retStaff.value, client, qty });
+    }
+    retQty.value = ""; 
+    if(document.getElementById('retClient')) document.getElementById('retClient').value = "";
+    saveData(); render();
+}
+
+function handleSubmitDec() {
+    const shop = activeShop.value, staff = decStaff.value;
+    if(shop === "ALL") return alert("Select a shop first");
+    const isAbsent = document.getElementById('decAbsent').checked;
+    let declared = Number(decCount.value);
+    
+    const day = erpData[currentDate];
+    if(!isAbsent && declared < 0) return;
+    if(isAbsent) declared = 0;
+    
+    // COMBINED LOGIC: Count Unique Batch Numbers (BN) for this Staff + Product (Packet + Loose together)
+    const prods = day.productions.filter(p => p.shop === shop && p.staff === staff && p.product === currentProduct);
+    // Count unique BNs
+    const uniqueBNs = new Set(prods.map(p => p.bn)).size;
+    const actual = uniqueBNs;
+
+    if(editState.dec) {
+        const idx = day.staffDeclarations.findIndex(d => d.id === editState.dec);
+        if(idx !== -1) day.staffDeclarations[idx] = { ...day.staffDeclarations[idx], shop, staff, declared, actual, type: 'COMBINED', isAbsent };
+        cancelEditMode('DEC');
+    } else {
+        // Remove existing declarations for this staff/product to avoid duplicates
+        day.staffDeclarations = day.staffDeclarations.filter(d => !(d.shop === shop && d.staff === staff && d.product === currentProduct));
+        day.staffDeclarations.push({ id: generateId(), shop, staff, product: currentProduct, declared, actual, type: 'COMBINED', isAbsent });
+    }
+    decCount.value = ""; document.getElementById('decAbsent').checked = false; saveData(); render();
+}
+
+/* --- EDIT/DELETE HELPERS --- */
+function editItem(type, id) {
+    const day = erpData[currentDate];
+    if(type === 'PROD') {
+        const i = day.productions.find(p=>p.id===id); if(!i) return;
+        if(i.product!==currentProduct) setProductContext(i.product);
+        if(i.type!==currentCategory) setCategory(i.type);
+        activeShop.value=i.shop;
+
+        // Sync batch sequence to the item's batch BEFORE syncing UI
+        if(i.bn && i.bn.includes('-')) {
+            const seq = parseInt(i.bn.split('-')[1]);
+            if(!isNaN(seq)) {
+                if(!day.batchSeq) day.batchSeq = {};
+                day.batchSeq[getBatchKey()] = seq;
+            }
+        }
+
+        syncShopUI(); 
+        activeStaff.value=i.staff; prodQty.value=i.qty;
+        if(i.type === 'LOOSE' &&  document.getElementById('prodClient')) document.getElementById('prodClient').value = (i.client || "");
+        editState.prod=id; activeShop.disabled=true;
+        document.getElementById('btnProdAdd').innerHTML="Update Production"; document.getElementById('btnProdCancel').style.display="block";
+        render(); // Refresh to update batch color and sequence input
+    }
+    if(type === 'DEL') {
+        const i = day.deliveries.find(d=>d.id===id); if(!i) return;
+        if(i.product!==currentProduct) setProductContext(i.product);
+        if(i.type!==currentCategory) setCategory(i.type);
+        activeShop.value=i.shop; syncShopUI(); delProdStaff.value=i.productionStaff; delStaff.value=i.deliveryStaff; delQty.value=i.qty;
+        if(i.type === 'LOOSE' &&  document.getElementById('delClient')) document.getElementById('delClient').value = (i.client || "");
+        editState.del=id; activeShop.disabled=true;
+        document.getElementById('btnDelAdd').innerHTML="Update Dispatch"; document.getElementById('btnDelCancel').style.display="block";
+    }
+    if(type === 'RET') {
+        const i = day.returns.find(r=>r.id===id); if(!i) return;
+        if(i.product!==currentProduct) setProductContext(i.product);
+        if(i.stockType!==currentCategory) setCategory(i.stockType);
+        retShop.value=i.shop; retStaff.value=i.staff; retQty.value=i.qty;
+        if(document.getElementById('retClient')) document.getElementById('retClient').value = (i.client || "");
+        document.getElementsByName('retAction').forEach(r => r.checked = (r.value === i.action));
+        editState.ret=id; activeShop.disabled=true;
+        document.getElementById('btnRetAdd').innerHTML="Update Entry"; document.getElementById('btnRetCancel').style.display="block";
+    }
+    if(type === 'DEC') {
+        const i = day.staffDeclarations.find(d=>d.id===id); if(!i) return;
+        activeShop.value=i.shop; syncDecUI(); decStaff.value=i.staff; decCount.value=i.declared;
+        document.getElementById('decAbsent').checked = (i.isAbsent === true);
+        editState.dec=id;
+        document.getElementById('btnDecAdd').innerHTML="Update"; document.getElementById('btnDecCancel').style.display="inline-block";
+    }
+}
+function deleteItem(type, id) {
+    if(!confirm("Delete?")) return;
+    const day = erpData[currentDate];
+    if(type==='PROD') {
+        day.productions = day.productions.filter(i => i.id !== id);
+    } else if(type==='DEL') {
+        day.deliveries = day.deliveries.filter(i => i.id !== id);
+    } else if(type==='RET') {
+        day.returns = day.returns.filter(i => i.id !== id);
+    } else if(type==='DEC') {
+        day.staffDeclarations = day.staffDeclarations.filter(i => i.id !== id);
+    }
+    saveData(); 
+    render();
+}
+function cancelEditMode(type) {
+    activeShop.disabled=false;
+    if(type==='PROD') { 
+        editState.prod=null; 
+        document.getElementById('btnProdAdd').innerHTML="<span>+</span> Save Production"; 
+        document.getElementById('btnProdCancel').style.display="none"; 
+        prodQty.value=""; 
+        if(document.getElementById('prodClient')) document.getElementById('prodClient').value = ""; 
+    }
+    if(type==='DEL') { 
+        editState.del=null; 
+        document.getElementById('btnDelAdd').innerHTML="<span>&#x2192;</span> Confirm Dispatch"; 
+        document.getElementById('btnDelCancel').style.display="none"; 
+        delQty.value=""; 
+        if(document.getElementById('delClient')) document.getElementById('delClient').value = ""; 
+    }
+    if(type==='RET') { 
+        editState.ret=null; 
+        document.getElementById('btnRetAdd').innerHTML="<span>!</span> Record Entry"; 
+        document.getElementById('btnRetCancel').style.display="none"; 
+        retQty.value=""; 
+        if(document.getElementById('retClient')) document.getElementById('retClient').value = "";
+    }
+    if(type==='DEC') { 
+        editState.dec=null; 
+        document.getElementById('btnDecAdd').innerHTML="<span>&#10003;</span> Verify & Save"; 
+        document.getElementById('btnDecCancel').style.display="none"; 
+        decCount.value=""; 
+        document.getElementById('decAbsent').checked = false;
+    }
+}
+
+/* --- STAFF GRID --- */
+function initStaffGrid() {
+    const grid = document.getElementById('staffGrid'); grid.innerHTML = "";
+    let all = []; Object.values(STAFF).forEach(arr => all.push(...arr));
+    [...new Set(all)].forEach(name => {
+        grid.innerHTML += `<div class="chip" onclick="showStaffStats('${name}', this)">${name}</div>`;
+    });
+}
+function showStaffStats(name, el) {
+    document.querySelectorAll('.chip').forEach(b => b.classList.remove('active')); 
+    if(el) el.classList.add('active');
+    
+    const day = erpData[currentDate];
+    // COMBINED: Filter by Staff & Product ONLY (Combine Packet + Loose)
+    const prods = day.productions.filter(p => p.staff === name && p.product === currentProduct);
+    
+    // Group by Batch
+    const batchSummary = {};
+    prods.forEach(p => {
+        if(!batchSummary[p.bn]) batchSummary[p.bn] = 0;
+        batchSummary[p.bn] += p.qty;
+    });
+    
+    const uniqueBatches = Object.keys(batchSummary).sort();
+    const totalVolume = Object.values(batchSummary).reduce((a, b) => a + b, 0);
+
+    document.getElementById('sdName').innerText = name; 
+    document.getElementById('sdProduct').innerText = currentProduct;
+    document.getElementById('sdBatches').innerText = uniqueBatches.length;
+    document.getElementById('sdVolume').innerText = totalVolume + " L";
+    
+    const list = document.getElementById('sdList'); 
+    list.innerHTML = "";
+    
+    if(uniqueBatches.length === 0) {
+        list.innerHTML = `<div style="text-align:center;color:#94a3b8;padding:10px">No data</div>`;
+    } else {
+        uniqueBatches.forEach(bn => {
+            const batchItems = prods.filter(p => p.bn === bn);
+            const qty = batchItems.reduce((a, b) => a + (b.qty || 0), 0);
+            const clients = [...new Set(batchItems.filter(p => p.type === 'LOOSE').map(p => p.client))].join(", ");
+            const bClr = getBatchColor(bn);
+            
+            list.innerHTML += `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px dashed #e2e8f0">
+                    <div>
+                        <span class="badge" style="background:${bClr.bg}; color:${bClr.text}; font-size:11px">${bn}</span>
+                        ${clients ? `<div style="font-size:10px; color:#64748b; margin-top:2px">${clients}</div>` : ''}
+                    </div>
+                    <strong style="font-size:14px">${qty} L</strong>
+                </div>`;
+        });
+    }
+    document.getElementById('staffDetailsCard').style.display = 'block';
+}
+
+/* --- RENDER --- */
+function render() {
+    const day = erpData[currentDate];
+    const shop = activeShop.value;
+    
+    // Calculate Stats
+    const daily = calculateDailyMovement(currentDate, shop, currentProduct);
+    const opening = getOpeningBalance(currentDate, shop, currentProduct);
+    
+    // Update Batch UI
+    const pUi = document.getElementById('uibatchPrefix');
+    const sUi = document.getElementById('batchSeqInput');
+    if(pUi && sUi) {
+        if(shop === "ALL") {
+            pUi.innerText = "-";
+            sUi.value = ""; sUi.disabled = true;
+            pUi.style.color = "var(--primary)";
+        } else {
+            const day = erpData[currentDate];
+            if(!day.batchSeq) day.batchSeq = {};
+            const seq = day.batchSeq[getBatchKey()] || 1;
+            
+            const sCode = shop.slice(0,1).toUpperCase();
+            const pCode = currentProduct.slice(0,1).toUpperCase();
+            const prefix = `${sCode}${pCode}-`;
+            
+            pUi.innerText = prefix;
+            sUi.value = seq; sUi.disabled = false;
+            
+            const bClr = getBatchColor(`${prefix}${seq}`);
+            pUi.style.color = bClr.text;
+            sUi.style.color = bClr.text;
+            sUi.style.borderBottomColor = bClr.text;
+        }
+    }
+    
+    // Update UI
+    document.getElementById('uiOpen').innerText = opening;
+    
+    // Calculate Production Today
+    let producedToday = 0;
+    if(day && day.productions) {
+        day.productions.forEach(p => {
+             if(p.product === currentProduct && (shop === "ALL" || p.shop === shop) && p.type === currentCategory) {
+                  producedToday += p.qty;
+             }
+        });
+    }
+    document.getElementById('uiProduced').innerText = producedToday;
+
+    // Calculate Dispatch Today
+    let dispatchedToday = 0;
+    if(day && day.deliveries) {
+        day.deliveries.forEach(d => {
+             if(d.product === currentProduct && (shop === "ALL" || d.shop === shop) && d.type === currentCategory) {
+                  dispatchedToday += d.qty;
+             }
+        });
+    }
+
+    // --- ALERT & LOGIC CONSOLIDATION ---
+    const mismatchEl = document.getElementById('looseMismatchAlert');
+    const undispatchedEl = document.getElementById('looseUndispatchedAlert');
+    const undispatchedContent = document.getElementById('looseUndispatchedContent');
+    const summaryCard = document.getElementById('looseDeliveryLogCard');
+    const summaryLog = document.getElementById('looseDeliveryLog');
+
+    if (currentCategory === 'LOOSE') {
+        const clientBalances = getClientBalances(currentDate, shop, currentProduct);
+        const criticalErrors = []; 
+        const pendingStock = [];   
+
+        // Corrected Logic: Production + Opening Balance = Dispatch. Balance remains in Loose Stock.
+        const currentStockBal = opening + daily;
+        if (currentStockBal < 0) {
+            criticalErrors.push(`Inventory Shortage: ${Math.abs(currentStockBal)}L (Dispatch exceeds total stock available)`);
+        }
+
+        Object.keys(clientBalances).sort().forEach(c => {
+            const b = clientBalances[c];
+            const closing = (b.opening + b.prod) - (b.disp - b.ret + b.dmg);
+            if (closing < 0) criticalErrors.push(`${c}: Excess Dispatch (${Math.abs(closing)}L)`);
+            else if (closing > 0) pendingStock.push({ name: c, qty: closing });
+        });
+
+        // Update Mismatch Alert
+        if (criticalErrors.length > 0 && mismatchEl) {
+            mismatchEl.style.display = 'block';
+            mismatchEl.innerHTML = `<strong>⚠️ Inventory Discrepancy</strong><div style="font-size:11px; font-weight:400; margin-top:4px">${criticalErrors.join("<br>")}</div>`;
+        } else if (mismatchEl) {
+            mismatchEl.style.display = 'none';
+        }
+
+        // Update Undispatched Dashboard Alert
+        if (pendingStock.length > 0 && undispatchedEl && undispatchedContent) {
+            undispatchedEl.style.display = 'block';
+            undispatchedContent.innerHTML = pendingStock.map(p => `<div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:2px"><span>${p.name}</span><span style="font-weight:700">${p.qty}L</span></div>`).join("");
+        } else if (undispatchedEl) {
+            undispatchedEl.style.display = 'none';
+        }
+
+        // Update Tomorrow's Queue Log
+        if (summaryCard && summaryLog) {
+            summaryCard.style.display = 'block';
+            summaryLog.innerHTML = pendingStock.length === 0 ? `<tr><td colspan="2" style="text-align:center;color:#cbd5e1;padding:10px">Zero Carryover - All Cleared</td></tr>` : pendingStock.map(e => `<tr><td>${e.name}</td><td style="text-align:right; font-weight:700">${e.qty}</td></tr>`).join("");
+        }
+    } else {
+        if (mismatchEl) mismatchEl.style.display = 'none';
+        if (undispatchedEl) undispatchedEl.style.display = 'none';
+        if (summaryCard) summaryCard.style.display = 'none';
+    }
+
+    const bal = opening + daily;
+    
+    document.getElementById('uiBal').innerHTML = `${bal} <span class="stat-unit">L</span>`;
+    // Removed old packet/loose ui element updates using innerHTML or innerText if they don't exist anymore loops
+    // Wait, the IDs uiBalPacket etc are gone, replaced by uiBal and uiOpen.
+    // So the above is correct.
+
+    const pLog = document.getElementById('prodLog'); pLog.innerHTML = "";
+    // Update headers based on Category
+    const pHeads = document.querySelector('#prodLog').previousElementSibling.firstElementChild; // the <thead><tr>
+    if(pHeads) {
+        if(currentCategory === 'LOOSE') pHeads.innerHTML = `<th>Batch</th><th>Who / Shop</th><th>Client</th><th style="text-align:right">Qty</th><th style="text-align:right"></th>`;
+        else pHeads.innerHTML = `<th>Batch</th><th>Who / Shop</th><th>Type</th><th style="text-align:right">Qty</th><th style="text-align:right"></th>`;
+    }
+
+    const dLog = document.getElementById('delLog'); dLog.innerHTML = "";
+    // Update Dispatch headers
+    const dHeads = document.querySelector('#delLog').previousElementSibling.firstElementChild; 
+    if(dHeads) {
+        if(currentCategory === 'LOOSE') dHeads.innerHTML = `<th>From</th><th>Driver</th><th>Client</th><th style="text-align:right">Qty</th><th style="text-align:right"></th>`;
+        else dHeads.innerHTML = `<th>From</th><th>Driver</th><th style="text-align:right">Qty</th><th style="text-align:right"></th>`;
+    }
+
+    const rLog = document.getElementById('retLog'); rLog.innerHTML = "";
+    const dcLog = document.getElementById('decLog'); dcLog.innerHTML = "";
+
+    if(day) {
+        // SORTED PRODUCTION LOG
+        const sortedProds = [...day.productions] // Clone to ensure no mutation issues
+            .filter(i => i.product === currentProduct && (shop === "ALL" || i.shop === shop) && i.type === currentCategory)
+            .sort((a, b) => {
+                const getSeq = (bn) => {
+                    if (!bn || typeof bn !== 'string') return 0;
+                    const cleanBn = bn.trim();
+                    if (cleanBn === '-') return 0;
+                    const parts = cleanBn.split('-');
+                    // Handle cases like "ND-7" -> 7, or just "7" -> 7
+                    const numPart = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+                    return parseInt(numPart, 10) || 0;
+                };
+                const seqA = getSeq(a.bn);
+                const seqB = getSeq(b.bn);
+                return seqA - seqB;
+            });
+
+        sortedProds.forEach(i => {
+            let extraCol = "";
+            if(currentCategory === 'LOOSE') {
+                extraCol = `<td>${i.client || '-'}</td>`;
+            } else {
+                extraCol = `<td><span class="badge ${i.type==='PACKET'?'bg-pkt':'bg-ls'}">${i.type}</span></td>`;
+            }
+
+            const bClr = getBatchColor(i.bn);
+            pLog.innerHTML += `<tr><td><span class="badge" style="background:${bClr.bg};color:${bClr.text}">${i.bn}</span></td><td><div style="font-weight:700">${i.staff}</div><div style="font-size:10px; color:#64748b">${i.shop}</div></td>${extraCol}<td style="text-align:right;font-weight:700">${i.qty}</td><td style="text-align:right"><div class="btn-action-group"><button class="btn-icon btn-edit" onclick="editItem('PROD','${i.id}')">E</button><button class="btn-icon btn-del" onclick="deleteItem('PROD','${i.id}')">D</button></div></td></tr>`;
+        });
+        day.deliveries.forEach(i => {
+            if(i.product!==currentProduct || (shop!=="ALL" && i.shop!==shop) || i.type!==currentCategory) return;
+            
+            let extraCols = "";
+            if(currentCategory === 'LOOSE') {
+                extraCols = `<td>${i.deliveryStaff}</td><td>${i.client || '-'}</td>`;
+            } else {
+                extraCols = `<td>${i.deliveryStaff}</td>`;
+            }
+
+            dLog.innerHTML += `<tr><td>${i.productionStaff}</td>${extraCols}<td style="text-align:right;font-weight:700">${i.qty}</td><td style="text-align:right"><div class="btn-action-group"><button class="btn-icon btn-edit" onclick="editItem('DEL','${i.id}')">E</button><button class="btn-icon btn-del" onclick="deleteItem('DEL','${i.id}')">D</button></div></td></tr>`;
+        });
+        day.returns.forEach(i => {
+            if(i.product!==currentProduct || (shop!=="ALL" && i.shop!==shop) || i.stockType!==currentCategory) return;
+            const isRet = i.action === 'RETURN';
+            rLog.innerHTML += `<tr><td><span class="badge ${isRet?'bg-green':'bg-red'}">${isRet?'RETURN':'DAMAGE'}</span></td><td><span class="badge ${i.stockType==='PACKET'?'bg-pkt':'bg-ls'}">${i.stockType}</span></td><td>${i.client || '-'}</td><td>${i.staff}</td><td style="text-align:right;font-weight:700">${i.qty}</td><td style="text-align:right"><div class="btn-action-group"><button class="btn-icon btn-edit" onclick="editItem('RET','${i.id}')">E</button><button class="btn-icon btn-del" onclick="deleteItem('RET','${i.id}')">D</button></div></td></tr>`;
+        });
+        day.staffDeclarations.forEach(i => {
+            if(i.product!==currentProduct || (shop!=="ALL" && i.shop!==shop)) return;
+            // COMBINED: Show all declarations for this staff regardless of type
+
+            
+            const isAbsent = i.isAbsent || false;
+            const ok = i.declared === i.actual;
+            dcLog.innerHTML += `<tr><td>${i.staff}</td><td>${isAbsent ? '<span class="badge bg-red">ABSENT</span>' : i.declared}</td><td>${i.actual}</td><td><span class="badge ${ok?'bg-green':'bg-red'}">${ok?'OK':'NO'}</span></td><td style="text-align:right"><div class="btn-action-group"><button class="btn-icon btn-edit" onclick="editItem('DEC','${i.id}')">E</button><button class="btn-icon btn-del" onclick="deleteItem('DEC','${i.id}')">D</button></div></td></tr>`;
+        });
+    }
+    if(pLog.innerHTML==="") pLog.innerHTML=empty; if(dLog.innerHTML==="") dLog.innerHTML=empty; if(rLog.innerHTML==="") rLog.innerHTML=empty; if(dcLog.innerHTML==="") dcLog.innerHTML=empty;
+
+    const ac = document.querySelector('.chip.active'); if(ac) showStaffStats(ac.innerText, ac);
+}
+</script>
+</body>
+</html>
