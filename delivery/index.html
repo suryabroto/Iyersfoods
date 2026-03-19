@@ -549,7 +549,8 @@
             const dateData = globalDB[selectedDate] || {};
             // Firestore doesn't support undefined values; sanitize first
             const sanitized = JSON.parse(JSON.stringify(dateData));
-            await db.collection("delivery").doc(selectedDate).set(sanitized, { merge: true });
+            // FIXED: Use the shared 'data/route' document instead of separate root collection
+            await db.collection("data").doc("route").set({ [selectedDate]: sanitized }, { merge: true });
         } catch (err) {
             console.error("Firestore save error:", err);
         }
@@ -581,23 +582,36 @@
         fullRender();
 
         // Step 2: Set up real-time listener (Compat Style)
-        unsubscribeSnapshot = db.collection("delivery").doc(date).onSnapshot({ includeMetadataChanges: true }, (snap) => {
+        // FIXED: Listen to the shared 'data/route' document for all updates
+        unsubscribeSnapshot = db.collection("data").doc("route").onSnapshot({ includeMetadataChanges: true }, (snap) => {
             // Priority Check: Is this a local write or are we in a typing cooldown?
             const isLocal = snap.metadata.hasPendingWrites;
             const now = Date.now();
             const recentlyTyped = (now - lastSaveTime) < 2000;
 
             if (snap.exists) {
-                const remoteData = snap.data();
-                globalDB[date] = remoteData;
+                const remoteAllData = snap.data();
+                // Update the entire local cache with the remote data object
+                globalDB = remoteAllData;
                 localStorage.setItem(DB_KEY, JSON.stringify(globalDB));
+                
+                // Ensure the requested date exists in the loaded data
+                if (!globalDB[date]) {
+                    globalDB[date] = {
+                        PACKET: { trips: [], returns: [], shops: {} },
+                        LOOSE:  { trips: [], returns: [], shops: {} }
+                    };
+                }
                 currentData = globalDB[date][currentCategory];
                 initShopDataForDate(date);
             } else {
-                globalDB[date] = globalDB[date] || {
-                    PACKET: { trips: [], returns: [], shops: {} },
-                    LOOSE:  { trips: [], returns: [], shops: {} }
-                };
+                // If the doc doesn't exist, use the current memory state or empty
+                if (!globalDB[date]) {
+                    globalDB[date] = {
+                        PACKET: { trips: [], returns: [], shops: {} },
+                        LOOSE:  { trips: [], returns: [], shops: {} }
+                    };
+                }
                 currentData = globalDB[date][currentCategory];
             }
 
@@ -634,15 +648,20 @@
 
         // Fetch from Firestore and update cache (Compat Style)
         try {
-            const snap = await db.collection("clients").get();
-            if (!snap.empty) {
-                const clients = [];
-                snap.forEach(d => clients.push(d.data()));
-                clients.sort((a, b) => (a.routeIndex || 0) - (b.routeIndex || 0));
-                SHOP_LIST = clients.map(c => c.name);
+            // FIXED: Use the shared 'data/clients' document instead of separate root collection
+            const snap = await db.collection("data").doc("clients").get();
+            if (snap.exists) {
+                const clients = snap.data().list || [];
+                // Sort or handle as needed (Production app might have different sorting)
+                // clients.sort((a, b) => (a.routeIndex || 0) - (b.routeIndex || 0));
+                SHOP_LIST = clients.map(c => typeof c === 'string' ? c : c.name);
                 SHOP_PRICES = {};
                 clients.forEach(c => {
-                    SHOP_PRICES[c.name] = { pd: Number(c.pd) || DEFAULT_PRICES.dosa, pa: Number(c.pa) || DEFAULT_PRICES.appam };
+                    const name = typeof c === 'string' ? c : c.name;
+                    SHOP_PRICES[name] = { 
+                        pd: Number(c.pd) || DEFAULT_PRICES.dosa, 
+                        pa: Number(c.pa) || DEFAULT_PRICES.appam 
+                    };
                 });
                 localStorage.setItem(CLIENT_DB_KEY, JSON.stringify(clients));
                 if (selectedDate) {
