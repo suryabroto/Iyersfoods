@@ -5,6 +5,9 @@
 <title>IyersFood – Route App v3.1</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Firebase Compat SDKs (Required for local file:// access) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <style>
     :root {
         --primary: #4f46e5;
@@ -275,6 +278,7 @@
              <li class="nav-item" onclick="switchSection('shops')"><span class="nav-icon">🛒</span> Shop Sales</li>
              <li class="nav-item" onclick="switchSection('tally')"><span class="nav-icon">📝</span> Tally Sheet</li>
         </ul>
+        <!-- Reset button removed -->
     </nav>
     <main class="main-content">
         <div class="top-bar">
@@ -497,282 +501,342 @@
 </main>
 </div> <!-- End App Wrapper -->
 
-<script type="module">
-import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../firebase-config.js";
+<script>
+    // Firebase Configuration (Required for local file:// access via Compat SDK)
+    const firebaseConfig = {
+      apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
+      authDomain: "iyers-c0944.firebaseapp.com",
+      projectId: "iyers-c0944",
+      storageBucket: "iyers-c0944.firebasestorage.app",
+      messagingSenderId: "234376255779",
+      appId: "1:234376255779:web:8f4b43ff3f66cfd4071496"
+    };
 
-// syncWindow is defined after all vars/functions - see bottom of script
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
     /* --- CONFIG --- */
     const DEFAULT_PRICES = { dosa: 45, appam: 55 };
     const DB_KEY = "IYERS_ROUTE_V3_1";
     const CLIENT_DB_KEY = "IYERS_CLIENT_DB_V2";
     
-    // Default Fallback (Will be overwritten by real DB if exists)
     let SHOP_LIST = [];
-    let SHOP_PRICES = {}; // { "Name": { pd:45, pa:55 } }
-
+    let SHOP_PRICES = {};
 
     /* --- STATE --- */
     let globalDB = {}; 
     let currentData = {};
     let selectedDate = "";
-    let currentCategory = "PACKET"; // PACKET or LOOSE
-    let selectedDriver = ""; // Global Driver Filter
+    let currentCategory = "PACKET";
+    let selectedDriver = "";
     let activeSection = "overview";
-    let pastDuesCache = {}; // Cache for calculated past balances
+    let pastDuesCache = {};
+    let unsubscribeSnapshot = null; // Holds the active onSnapshot listener
+    let lastSaveTime = 0; // Throttles full re-renders during active typing
+    window.editState = { trip: null };
 
-    function toggleSidebar() {
-        const sb = document.getElementById('sidebar');
-        const overlay = document.querySelector('.sidebar-overlay');
-        sb.classList.toggle('open');
-        overlay.classList.toggle('show');
+    /* ---- FIRESTORE SAVE ---- */
+    async function saveData() {
+        lastSaveTime = Date.now();
+        // 1. Update in-memory + localStorage cache immediately (fast / offline)
+        if (!globalDB[selectedDate]) globalDB[selectedDate] = {};
+        globalDB[selectedDate][currentCategory] = currentData;
+        localStorage.setItem(DB_KEY, JSON.stringify(globalDB));
+
+        // 2. Write to Firestore (merge so both PACKET & LOOSE coexist in same doc)
+        try {
+            const dateData = globalDB[selectedDate] || {};
+            // Firestore doesn't support undefined values; sanitize first
+            const sanitized = JSON.parse(JSON.stringify(dateData));
+            await db.collection("delivery").doc(selectedDate).set(sanitized, { merge: true });
+        } catch (err) {
+            console.error("Firestore save error:", err);
+        }
     }
 
-    function switchSection(sectionId) {
-        activeSection = sectionId;
-        
-        // Update Sidebar UI
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.classList.remove('active');
-            if (item.getAttribute('onclick').includes(`'${sectionId}'`)) {
-                item.classList.add('active');
+    /* ---- LOAD A DATE FROM FIRESTORE (with localStorage cache for instant display) ---- */
+    async function loadDateFromFirestore(date) {
+        // Unsubscribe previous listener if switching dates
+        if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+
+        // Step 1: Try to show locally cached data immediately
+        const raw = localStorage.getItem(DB_KEY);
+        if (raw) {
+            try { globalDB = JSON.parse(raw); } catch(e) { globalDB = {}; }
+        }
+        if (!globalDB[date]) {
+            globalDB[date] = {
+                PACKET: { trips: [], returns: [], shops: {} },
+                LOOSE:  { trips: [], returns: [], shops: {} }
+            };
+        }
+        currentData = globalDB[date][currentCategory];
+        initShopDataForDate(date);
+        pastDuesCache = {};
+        SHOP_LIST.forEach(shop => {
+            const bal = getPendingBalance(shop, date);
+            if (bal !== 0) pastDuesCache[shop] = bal;
+        });
+        fullRender();
+
+        // Step 2: Set up real-time listener (Compat Style)
+        unsubscribeSnapshot = db.collection("delivery").doc(date).onSnapshot({ includeMetadataChanges: true }, (snap) => {
+            // Priority Check: Is this a local write or are we in a typing cooldown?
+            const isLocal = snap.metadata.hasPendingWrites;
+            const now = Date.now();
+            const recentlyTyped = (now - lastSaveTime) < 2000;
+
+            if (snap.exists) {
+                const remoteData = snap.data();
+                globalDB[date] = remoteData;
+                localStorage.setItem(DB_KEY, JSON.stringify(globalDB));
+                currentData = globalDB[date][currentCategory];
+                initShopDataForDate(date);
+            } else {
+                globalDB[date] = globalDB[date] || {
+                    PACKET: { trips: [], returns: [], shops: {} },
+                    LOOSE:  { trips: [], returns: [], shops: {} }
+                };
+                currentData = globalDB[date][currentCategory];
             }
-        });
 
-        // Update Section Visibility
-        document.querySelectorAll('.content-section').forEach(sec => {
-            sec.classList.remove('active');
-        });
-        document.getElementById(sectionId).classList.add('active');
+            // IF THE USER IS TYPING: Skip the heavy UI re-render (avoids cursor jumps/digit reversal)
+            if (isLocal || recentlyTyped) {
+                console.log("Sync skipped (Active Typing)");
+                return; 
+            }
 
-        // Close Sidebar on Mobile
-        if (window.innerWidth <= 1024) {
-            document.getElementById('sidebar').classList.remove('open');
-            document.querySelector('.sidebar-overlay').classList.remove('show');
-        }
+            pastDuesCache = {};
+            SHOP_LIST.forEach(shop => {
+                const bal = getPendingBalance(shop, date);
+                if (bal !== 0) pastDuesCache[shop] = bal;
+            });
+            fullRender();
+        }, (err) => {
+            console.error("Firestore listener error:", err);
+        });
     }
 
-
-    function resetAllData() {
-        if (confirm("⚠️ CAUTION: RESET ALL DATA?\n\nThis will permanently delete all daily logs and delivery records.\n\nNOTE: YOUR CLIENT REGISTER (1000+ SHOPS) WILL BE PRESERVED.\n\nAre you sure you want to proceed?")) {
-            setDoc(doc(db, "data", "route"), {})
-                .then(() => alert("Daily logs have been cleared on Firestore. Client register was preserved."))
-                .catch(err => alert("Error resetting data: " + err.message));
-        }
-    }
-
-    window.onload = () => {
-        loadClients();
-        loadDataFromFirebase();
-
-        const today = new Date().toISOString().split('T')[0];
-
-        const workDateEl = document.getElementById('workDate');
-        if (workDateEl) {
-            workDateEl.value = today;
-            workDateEl.onchange = () => loadDate(workDateEl.value);
-        }
-
-        // --- RESTORE PERSISTED SELECTIONS (Driver & Hub) ---
-        const savedDriver = localStorage.getItem('IYERS_SELECTED_DRIVER') || '';
-        const savedHub    = localStorage.getItem('IYERS_SELECTED_HUB')    || 'ALL';
-
-        const activeHubEl = document.getElementById('activeHub');
-        if (activeHubEl) {
-            activeHubEl.value = savedHub;
-            activeHubEl.onchange = () => {
-                localStorage.setItem('IYERS_SELECTED_HUB', activeHubEl.value);
-                fullRender();
-            };
-        }
-
-        // Restore driver (sets selectedDriver + syncs both selects)
-        selectedDriver = savedDriver;
-        const globalDriverEl = document.getElementById('globalDriverSelect');
-        if (globalDriverEl) globalDriverEl.value = savedDriver;
-        
-        // Setup Trip Edit Mode State
-        window.editState = { trip: null };
-        
-        // Sync Trip Driver dropdown to Global Filter
-        const tripDriverEl = document.getElementById('tripDriver');
-        if (tripDriverEl) {
-            tripDriverEl.value = savedDriver;
-            tripDriverEl.onchange = () => {
-                setGlobalDriver(tripDriverEl.value);
-                fullRender();
-            };
-        }
-
-        // Expose ALL functions to window so inline onclick/oninput works
-        syncWindow();
-
-        loadDate(today);
-    };
-
-    function loadClients() {
-        const docRef = doc(db, "data", "clients");
-        onSnapshot(docRef, (snapshot) => {
-            if(!snapshot.exists()) return;
-            const clients = snapshot.data().list || [];
-            if(clients.length > 0) {
-                // Preserve order as it was in V2
-                SHOP_LIST = clients.map(c => typeof c === 'string' ? c : c.name);
+    /* ---- LOAD CLIENTS FROM FIRESTORE (with localStorage cache fallback) ---- */
+    async function loadClients() {
+        const rawClient = localStorage.getItem(CLIENT_DB_KEY);
+        if (rawClient) {
+            try {
+                const clients = JSON.parse(rawClient);
+                SHOP_LIST = clients.map(c => c.name);
                 SHOP_PRICES = {};
                 clients.forEach(c => {
-                    if(typeof c === 'object') {
-                        SHOP_PRICES[c.name] = { pd: Number(c.pd), pa: Number(c.pa) };
-                    }
+                    SHOP_PRICES[c.name] = { pd: Number(c.pd), pa: Number(c.pa) };
                 });
-                syncWindow();
-                fullRender();
+            } catch(e) {}
+        }
+
+        // Fetch from Firestore and update cache (Compat Style)
+        try {
+            const snap = await db.collection("clients").get();
+            if (!snap.empty) {
+                const clients = [];
+                snap.forEach(d => clients.push(d.data()));
+                clients.sort((a, b) => (a.routeIndex || 0) - (b.routeIndex || 0));
+                SHOP_LIST = clients.map(c => c.name);
+                SHOP_PRICES = {};
+                clients.forEach(c => {
+                    SHOP_PRICES[c.name] = { pd: Number(c.pd) || DEFAULT_PRICES.dosa, pa: Number(c.pa) || DEFAULT_PRICES.appam };
+                });
+                localStorage.setItem(CLIENT_DB_KEY, JSON.stringify(clients));
+                if (selectedDate) {
+                    initShopDataForDate(selectedDate);
+                    fullRender();
+                }
             }
-        });
-        
-        // Migration from local if empty
-        getDoc(docRef).then((snapshot) => {
-            if(!snapshot.exists()) {
-                const rawClient = localStorage.getItem(CLIENT_DB_KEY);
-                if(rawClient) setDoc(docRef, { list: JSON.parse(rawClient) });
-            }
-        });
+        } catch (err) {
+            console.warn("Could not fetch clients from Firestore, using local cache:", err);
+        }
     }
-    
-    // Helper to get price
+
     function getPrice(shop, type) {
-        if(SHOP_PRICES[shop]) {
+        if (SHOP_PRICES[shop]) {
             return type === 'dosa' ? SHOP_PRICES[shop].pd : SHOP_PRICES[shop].pa;
         }
         return DEFAULT_PRICES[type];
     }
 
+    // resetAllData function removed 
+
+
+    /* ---- WINDOW ONLOAD ---- */
+    window.onload = async () => {
+        console.log("IyersRoute V3.1 Initializing...");
+        
+        try {
+            // Priority 1: Set Date & Load Cache immediately for UI feedback
+            const today = new Date().toISOString().split('T')[0];
+            const lastDate = localStorage.getItem('IYERS_LAST_DATE') || today;
+            selectedDate = lastDate; // Set temporarily for initShopData
+            
+            // Priority 2: Initialize basic structure so buttons don't crash
+            if (!globalDB[selectedDate]) {
+                globalDB[selectedDate] = {
+                    PACKET: { trips: [], returns: [], shops: {}, tally: { cashInHandMap: {}, denomsMap: {}, expenses: [] } },
+                    LOOSE:  { trips: [], returns: [], shops: {}, tally: { cashInHandMap: {}, denomsMap: {}, expenses: [] } }
+                };
+            }
+            currentData = globalDB[selectedDate][currentCategory] || { trips: [], returns: [], shops: {} };
+
+            // Start loading process
+            await loadDate(lastDate);
+
+            // Restore other selections
+            const lastHub = localStorage.getItem('IYERS_LAST_HUB');
+            const lastDriver = localStorage.getItem('IYERS_LAST_DRIVER');
+            const lastCategory = localStorage.getItem('IYERS_LAST_CATEGORY');
+            const lastSection = localStorage.getItem('IYERS_LAST_SECTION');
+
+            const workDateInput = document.getElementById('workDate');
+            if (workDateInput) {
+                workDateInput.value = lastDate;
+                workDateInput.onchange = () => loadDate(workDateInput.value);
+            }
+
+            const activeHubSelect = document.getElementById('activeHub');
+            if (activeHubSelect) {
+                if (lastHub) activeHubSelect.value = lastHub;
+                activeHubSelect.onchange = () => {
+                    localStorage.setItem('IYERS_LAST_HUB', activeHubSelect.value);
+                    fullRender();
+                };
+            }
+
+            if (lastDriver) setGlobalDriver(lastDriver);
+            if (lastCategory) setCategory(lastCategory);
+            if (lastSection) switchSection(lastSection);
+
+            // Background load clients (non-blocking for UI)
+            loadClients().catch(err => console.error("Client loading failed", err));
+
+            // Cross-tab sync via localStorage events
+            window.addEventListener('storage', (e) => {
+                const syncKeys = [DB_KEY, CLIENT_DB_KEY];
+                if (syncKeys.includes(e.key)) {
+                    if (e.key === CLIENT_DB_KEY) {
+                        loadClients();
+                    } else if (e.key === DB_KEY) {
+                        const raw = localStorage.getItem(DB_KEY);
+                        if (raw) {
+                             globalDB = JSON.parse(raw);
+                             currentData = globalDB[selectedDate]?.[currentCategory] || currentData;
+                        }
+                    }
+                    fullRender();
+                }
+            });
+
+            console.log("IyersRoute V3.1 Initialization Complete.");
+        } catch (err) {
+            console.error("Initialization failed:", err);
+            // Even if everything fails, try to show the date
+            const today = new Date().toISOString().split('T')[0];
+            loadDate(localStorage.getItem('IYERS_LAST_DATE') || today).catch(e => {});
+        }
+    };
+
+    function toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        const overlay = document.querySelector('.sidebar-overlay');
+        if (sb) sb.classList.toggle('open');
+        if (overlay) overlay.classList.toggle('show');
+    }
+
+    function switchSection(sectionId) {
+        console.log("Switching to section:", sectionId);
+        activeSection = sectionId;
+        localStorage.setItem('IYERS_LAST_SECTION', sectionId);
+        
+        // Update Nav Menu UI
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.classList.remove('active');
+            // More robust match: checks if the sectionId is present in attribute
+            const clickAttr = item.getAttribute('onclick') || "";
+            if (clickAttr.includes(`'${sectionId}'`) || clickAttr.includes(`"${sectionId}"`)) {
+                item.classList.add('active');
+            }
+        });
+
+        // Toggle visibility of specific section
+        const section = document.getElementById(sectionId);
+        if (section) {
+            document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
+            section.classList.add('active');
+        } else {
+            console.warn("Section not found:", sectionId);
+        }
+
+        // Auto-close sidebar on mobile
+        if (window.innerWidth <= 1024) {
+            const sb = document.getElementById('sidebar');
+            const overlay = document.querySelector('.sidebar-overlay');
+            if(sb) sb.classList.remove('open');
+            if(overlay) overlay.classList.remove('show');
+        }
+    }
 
     function setCategory(cat) {
         currentCategory = cat;
+        localStorage.setItem('IYERS_LAST_CATEGORY', cat);
         document.querySelectorAll('.sw-option[data-cat]').forEach(o => {
             o.classList.remove('active');
-            if(o.dataset.cat === cat) o.classList.add('active');
+            if (o.dataset.cat === cat) o.classList.add('active');
         });
-        
-        // Ensure data object exists for the new category/date combo
-        if(selectedDate) {
-            if(!globalDB[selectedDate]) globalDB[selectedDate] = { PACKET: { trips: [], returns: [], shops: {} }, LOOSE: { trips: [], returns: [], shops: {} } };
-            if(!globalDB[selectedDate][currentCategory]) {
+        if (selectedDate && globalDB[selectedDate]) {
+            if (!globalDB[selectedDate][currentCategory]) {
                 globalDB[selectedDate][currentCategory] = { trips: [], returns: [], shops: {} };
             }
             currentData = globalDB[selectedDate][currentCategory];
             initShopDataForDate(selectedDate);
+            fullRender();
         }
-        syncWindow();
-        fullRender();
     }
 
     function loadDate(date) {
         selectedDate = date;
-        const disp = document.getElementById('dateDisplay');
-        if (disp) disp.innerText = new Date(date).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
-
-        if(!globalDB[date]) {
-            globalDB[date] = { 
-                PACKET: { trips: [], returns: [], shops: {} },
-                LOOSE: { trips: [], returns: [], shops: {} }
-            };
+        localStorage.setItem('IYERS_LAST_DATE', date);
+        const displayEl = document.getElementById('dateDisplay');
+        if (displayEl) {
+            displayEl.innerText = new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
         }
-        currentData = globalDB[date][currentCategory];
-        
-        initShopDataForDate(date);
-        
-        // Clear and rebuild past dues cache whenever date changes
-        pastDuesCache = {};
-        SHOP_LIST.forEach(shop => {
-            const bal = getPendingBalance(shop, date);
-            if(bal !== 0) pastDuesCache[shop] = bal;
-        });
-
-        syncWindow();
-        fullRender();
+        // Delegate to Firebase-backed loader
+        loadDateFromFirestore(date);
     }
 
     function setGlobalDriver(driver) {
         selectedDriver = driver;
-        // Persist selection so it survives page refresh
-        localStorage.setItem('IYERS_SELECTED_DRIVER', driver);
+        localStorage.setItem('IYERS_LAST_DRIVER', driver);
         const select = document.getElementById('globalDriverSelect');
-        if(select) select.value = driver;
-        
-        // Sync the trip form selector too
-        const td = document.getElementById('tripDriver');
-        if(td) td.value = driver;
-        
+        if (select) select.value = driver;
+        if (typeof tripDriver !== 'undefined' && tripDriver) tripDriver.value = driver;
         fullRender();
     }
 
     function initShopDataForDate(date) {
-        // Ensure every shop has an entry in the data object
         SHOP_LIST.forEach(shop => {
-            if(!currentData.shops[shop]) {
+            if (!currentData.shops[shop]) {
                 currentData.shops[shop] = {
                     dosa: { sale: '', cr: '', dmg: '', free: '' },
                     appam: { sale: '', cr: '', dmg: '', free: '' },
-                    cashReceived: '' // Track cash received
+                    cashReceived: ''
                 };
-            } else if(!currentData.shops[shop].cashReceived) {
-                // Backward compatibility
+            } else if (!currentData.shops[shop].cashReceived) {
                 currentData.shops[shop].cashReceived = '';
             }
         });
-        
-        // Initialize Tally Data
-        if(!currentData.tally) {
+        if (!currentData.tally) {
             currentData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [] };
         } else {
-            if(!currentData.tally.cashInHandMap) currentData.tally.cashInHandMap = {};
-            if(!currentData.tally.denomsMap) currentData.tally.denomsMap = {};
+            if (!currentData.tally.cashInHandMap) currentData.tally.cashInHandMap = {};
+            if (!currentData.tally.denomsMap) currentData.tally.denomsMap = {};
         }
-        
-        // ADDED: Initialize activeShops order tracking
-        if(!currentData.activeShops) {
-            currentData.activeShops = [];
-        }
-    }
-
-    function loadDataFromFirebase() {
-        const docRef = doc(db, "data", "route");
-        onSnapshot(docRef, (snapshot) => {
-            if(!snapshot.exists()) return;
-            const data = snapshot.data();
-            if(data) {
-                globalDB = data;
-                if(selectedDate) {
-                    currentData = globalDB[selectedDate]?.[currentCategory] || { trips: [], returns: [], shops: {} };
-                    initShopDataForDate(selectedDate);
-                    syncWindow();
-                    fullRender();
-                }
-            }
-        }, (error) => {
-            console.error("Firestore read error (Route):", error);
-        });
-
-        getDoc(docRef).then((snapshot) => {
-            if(!snapshot.exists()) {
-                const raw = localStorage.getItem(DB_KEY);
-                if(raw) {
-                    globalDB = JSON.parse(raw);
-                    saveData();
-                    syncWindow();
-                }
-            }
-        });
-    }
-
-    function saveData() {
-        if(!db) return console.error("DB not initialized");
-        setDoc(doc(db, "data", "route"), globalDB)
-            .then(() => console.log("Route Data Saved Success"))
-            .catch(err => {
-                console.error("Route Save Failed", err);
-                alert("Error: Route data failed to sync to Firestore. Check rules.");
-            });
+        if (!currentData.activeShops) currentData.activeShops = [];
     }
 
     function generateId() { return Date.now().toString(36); }
@@ -780,31 +844,23 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
     function getPendingBalance(shopName, targetDate) {
         let totalValueSent = 0;
         let totalCashPaid = 0;
-        
         const dates = Object.keys(globalDB).sort();
         for (const d of dates) {
             if (d >= targetDate) break;
-            
             const dayDataObj = globalDB[d];
-            if(!dayDataObj) continue;
-
-            const categories = Object.keys(dayDataObj);
-            categories.forEach(cat => {
+            if (!dayDataObj) continue;
+            Object.keys(dayDataObj).forEach(cat => {
                 const data = dayDataObj[cat];
-                if(data && data.shops && data.shops[shopName]) {
+                if (data && data.shops && data.shops[shopName]) {
                     const s = data.shops[shopName];
                     const pD = getPrice(shopName, 'dosa');
                     const pA = getPrice(shopName, 'appam');
-                    
-                    const val = ( (Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0) ) * pD +
-                                ( (Number(s.appam.sale)||0) + (Number(s.appam.cr)||0) ) * pA;
-                    
-                    totalValueSent += val;
+                    totalValueSent += ((Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0)) * pD +
+                                      ((Number(s.appam.sale)||0) + (Number(s.appam.cr)||0)) * pA;
                     totalCashPaid += Number(s.cashReceived) || 0;
                 }
             });
         }
-        
         return totalValueSent - totalCashPaid;
     }
 
@@ -813,39 +869,25 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
         const dates = Object.keys(globalDB).sort();
         for (const d of dates) {
             if (d > targetDate) break;
-            
             const dayDataObj = globalDB[d];
-            if(!dayDataObj) continue;
-
-            let dateDosa = 0;
-            let dateAppam = 0;
-            let dateCash = 0;
-            let hasDateActivity = false;
-
-            const categories = Object.keys(dayDataObj);
-            categories.forEach(cat => {
+            if (!dayDataObj) continue;
+            let dateDosa = 0, dateAppam = 0, dateCash = 0, hasDateActivity = false;
+            Object.keys(dayDataObj).forEach(cat => {
                 const data = dayDataObj[cat];
-                if(data && data.shops && data.shops[shopName]) {
+                if (data && data.shops && data.shops[shopName]) {
                     const s = data.shops[shopName];
-                    dateDosa += (Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0);
+                    dateDosa  += (Number(s.dosa.sale)||0)  + (Number(s.dosa.cr)||0);
                     dateAppam += (Number(s.appam.sale)||0) + (Number(s.appam.cr)||0);
-                    dateCash += Number(s.cashReceived) || 0;
+                    dateCash  += Number(s.cashReceived) || 0;
                     hasDateActivity = true;
                 }
             });
-
-            if(hasDateActivity) {
+            if (hasDateActivity) {
                 const pD = getPrice(shopName, 'dosa');
                 const pA = getPrice(shopName, 'appam');
                 const dateVal = (dateDosa * pD) + (dateAppam * pA);
-                if(dateVal > 0 || dateCash > 0) {
-                    breakdown.push({
-                        date: d,
-                        dosa: dateDosa,
-                        appam: dateAppam,
-                        cash: dateCash,
-                        value: dateVal
-                    });
+                if (dateVal > 0 || dateCash > 0) {
+                    breakdown.push({ date: d, dosa: dateDosa, appam: dateAppam, cash: dateCash, value: dateVal });
                 }
             }
         }
@@ -853,60 +895,97 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
     }
 
     /* --- LOGIC: TRIPS & RETURNS --- */
-    function addTrip() {
-        const hub = document.getElementById('activeHub').value;
-        if(hub === "ALL") return alert("Select a specific Hub");
-        const driver = document.getElementById('tripDriver').value;
-        if(!driver) return alert("Select Driver");
-        const dQty = Number(document.getElementById('tripDosa').value);
-        const aQty = Number(document.getElementById('tripAppam').value);
-        if(dQty === 0 && aQty === 0) return alert("Enter quantity");
+    async function addTrip() {
+        const activeHubSelect = document.getElementById('activeHub');
+        const tripDriverSelect = document.getElementById('tripDriver');
+        const tripDosaInput = document.getElementById('tripDosa');
+        const tripAppamInput = document.getElementById('tripAppam');
+        const btnAddTrip = document.querySelector('.btn-add-trip');
 
-        if(window.editState && window.editState.trip) {
+        if (!activeHubSelect || !tripDriverSelect || !tripDosaInput || !tripAppamInput) {
+            console.error("Form elements not found");
+            return;
+        }
+
+        const hub = activeHubSelect.value;
+        if (hub === "ALL") return alert("Select a specific Hub");
+        
+        const driver = tripDriverSelect.value;
+        if (!driver) return alert("Select Driver");
+        
+        const dQty = Number(tripDosaInput.value) || 0;
+        const aQty = Number(tripAppamInput.value) || 0;
+        
+        if (dQty === 0 && aQty === 0) return alert("Enter quantity");
+
+        if (window.editState && window.editState.trip) {
+            // Update Existing
             const idx = currentData.trips.findIndex(t => t.id === window.editState.trip);
-            if(idx !== -1) {
+            if (idx !== -1) {
                 currentData.trips[idx] = { ...currentData.trips[idx], hub, driver, dosa: dQty, appam: aQty };
                 window.editState.trip = null;
-                document.querySelector('.btn-add-trip').innerText = "+ Add Trip";
-                document.querySelector('.btn-add-trip').style.background = "var(--text-main)";
+                if (btnAddTrip) {
+                    btnAddTrip.innerText = "+ Add Trip";
+                    btnAddTrip.style.background = ""; // Reset to CSS default
+                }
             }
         } else {
+            // New Entry
             currentData.trips.push({ id: generateId(), hub, driver, dosa: dQty, appam: aQty });
         }
         
-        document.getElementById('tripDosa').value = "";
-        document.getElementById('tripAppam').value = "";
-        saveData();
+        // Reset Inputs
+        tripDosaInput.value = ""; 
+        tripAppamInput.value = ""; 
+        
+        // Save and Render
+        await saveData(); 
         fullRender();
     }
 
     function editTrip(id) {
+        const activeHubSelect = document.getElementById('activeHub');
+        const tripDriverSelect = document.getElementById('tripDriver');
+        const tripDosaInput = document.getElementById('tripDosa');
+        const tripAppamInput = document.getElementById('tripAppam');
+        const btnAddTrip = document.querySelector('.btn-add-trip');
+
         const t = currentData.trips.find(t => t.id === id);
-        if(!t) return;
+        if (!t || !activeHubSelect || !tripDriverSelect || !tripDosaInput || !tripAppamInput) return;
         
-        document.getElementById('activeHub').value = t.hub;
-        document.getElementById('tripDriver').value = t.driver;
-        document.getElementById('tripDosa').value = t.dosa;
-        document.getElementById('tripAppam').value = t.appam;
+        activeHubSelect.value = t.hub;
+        tripDriverSelect.value = t.driver;
+        tripDosaInput.value = t.dosa;
+        tripAppamInput.value = t.appam;
         
         window.editState.trip = id;
-        const btn = document.querySelector('.btn-add-trip');
-        btn.innerText = "Update Trip";
-        btn.style.background = "var(--primary)";
-        btn.scrollIntoView({behavior: "smooth", block: "center"});
+        if (btnAddTrip) {
+            btnAddTrip.innerText = "Update Trip";
+            btnAddTrip.style.background = "var(--primary)";
+            btnAddTrip.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
     }
 
-    function deleteTrip(id) {
-        if(!confirm("Delete?")) return;
+    async function deleteTrip(id) {
+        if (!confirm("Delete this trip?")) return;
+        
         currentData.trips = currentData.trips.filter(t => t.id !== id);
-        if(window.editState && window.editState.trip === id) {
+        
+        if (window.editState && window.editState.trip === id) {
              window.editState.trip = null;
-             document.querySelector('.btn-add-trip').innerText = "+ Add Trip";
-             document.querySelector('.btn-add-trip').style.background = "var(--text-main)";
-             document.getElementById('tripDosa').value = "";
-             document.getElementById('tripAppam').value = "";
+             const btnAddTrip = document.querySelector('.btn-add-trip');
+             if (btnAddTrip) {
+                btnAddTrip.innerText = "+ Add Trip";
+                btnAddTrip.style.background = "";
+             }
+             const tripDosaInput = document.getElementById('tripDosa');
+             const tripAppamInput = document.getElementById('tripAppam');
+             if (tripDosaInput) tripDosaInput.value = "";
+             if (tripAppamInput) tripAppamInput.value = "";
         }
-        saveData(); fullRender();
+        
+        await saveData(); 
+        fullRender();
     }
 
 
@@ -1043,107 +1122,6 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
         else { pD.classList.remove('active'); pA.classList.add('active'); tD.classList.remove('active-dosa'); tA.classList.add('active-appam'); }
     }
 
-    function renderCreditGivenShops() {
-        const container = document.getElementById('creditGivenShopsContainer');
-        if(!container) return;
-        container.innerHTML = "";
-        
-        const filterDriver = selectedDriver;
-        let creditHTML = "", freeHTML = "", damageHTML = "";
-        let hasCredit = false, hasFree = false, hasDamage = false;
-
-        const dayData = globalDB[selectedDate] || {};
-        const orderedActive = [];
-        Object.keys(dayData).forEach(cat => {
-            if(dayData[cat].activeShops) {
-                dayData[cat].activeShops.forEach(s => {
-                    if(!orderedActive.includes(s)) orderedActive.push(s);
-                });
-            }
-        });
-        
-        const relevantShops = orderedActive;
-
-        relevantShops.forEach(shop => {
-            let dCr = 0, aCr = 0, dFree = 0, aFree = 0, dDmg = 0, aDmg = 0;
-            let shopDriver = null;
-
-            Object.keys(dayData).forEach(cat => {
-                const s = dayData[cat].shops[shop];
-                if(s) {
-                    dCr += Number(s.dosa.cr) || 0;
-                    aCr += Number(s.appam.cr) || 0;
-                    dFree += Number(s.dosa.free) || 0;
-                    aFree += Number(s.appam.free) || 0;
-                    dDmg += Number(s.dosa.dmg) || 0;
-                    aDmg += Number(s.appam.dmg) || 0;
-                    if(s.driver) shopDriver = s.driver;
-                }
-            });
-
-            if(filterDriver && shopDriver !== filterDriver) return;
-            
-            const pD = getPrice(shop, 'dosa');
-            const pA = getPrice(shop, 'appam');
-            const creditValue = (dCr * pD) + (aCr * pA);
-
-            // Credit Item
-            if(creditValue > 0) {
-                hasCredit = true;
-                creditHTML += `
-                <div style="background:white; padding:12px; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,0.02)">
-                    <div>
-                        <div style="font-weight:800; color:var(--text-main); font-size:13px">${shop}</div>
-                        <div style="font-size:11px; color:#64748b; margin-top:2px">${dCr} Dosa, ${aCr} Appam</div>
-                    </div>
-                    <div style="text-align:right">
-                        <div style="font-size:16px; font-weight:800; color:#ef4444">₹${creditValue}</div>
-                        <div style="font-size:9px; font-weight:700; color:#fca5a5; text-transform:uppercase">Today's Credit</div>
-                    </div>
-                </div>`;
-            }
-
-            // Free Item
-            if(dFree > 0 || aFree > 0) {
-                hasFree = true;
-                freeHTML += `
-                <div style="background:linear-gradient(to right, #f0f9ff, #fff); padding:12px; border-radius:12px; border:1px solid #bfdbfe; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <div style="font-weight:800; color:#1e40af; font-size:13px">${shop}</div>
-                        <div style="font-size:9px; font-weight:700; color:#60a5fa; text-transform:uppercase">Given Free</div>
-                    </div>
-                    <div style="text-align:right">
-                        <div style="font-size:13px; font-weight:800; color:#2563eb">${dFree}D, ${aFree}A</div>
-                    </div>
-                </div>`;
-            }
-
-            // Damage Item
-            if(dDmg > 0 || aDmg > 0) {
-                hasDamage = true;
-                damageHTML += `
-                <div style="background:linear-gradient(to right, #fff7ed, #fff); padding:12px; border-radius:12px; border:1px solid #fed7aa; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <div style="font-weight:800; color:#9a3412; font-size:13px">${shop}</div>
-                        <div style="font-size:9px; font-weight:700; color:#fb923c; text-transform:uppercase">Damage Reported</div>
-                    </div>
-                    <div style="text-align:right">
-                        <div style="font-size:13px; font-weight:800; color:#ea580c">${dDmg}D, ${aDmg}A</div>
-                    </div>
-                </div>`;
-            }
-        });
-        
-        // Render Sections
-        container.innerHTML += `<div style="font-size:11px; font-weight:800; color:#cbd5e1; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px">Credit Records</div>`;
-        container.innerHTML += hasCredit ? creditHTML : `<div style="text-align:center; padding:15px; color:#94a3b8; font-size:12px; background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1; margin-bottom:20px">No credit given today</div>`;
-        
-        container.innerHTML += `<div style="font-size:11px; font-weight:800; color:#cbd5e1; margin:20px 0 8px 0; text-transform:uppercase; letter-spacing:1px">Free / Complimentary</div>`;
-        container.innerHTML += hasFree ? freeHTML : `<div style="text-align:center; padding:15px; color:#94a3b8; font-size:12px; background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1; margin-bottom:20px">No free items given</div>`;
-
-        container.innerHTML += `<div style="font-size:11px; font-weight:800; color:#cbd5e1; margin:20px 0 8px 0; text-transform:uppercase; letter-spacing:1px">Damage Reports</div>`;
-        container.innerHTML += hasDamage ? damageHTML : `<div style="text-align:center; padding:15px; color:#94a3b8; font-size:12px; background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1; margin-bottom:20px">No damage reported</div>`;
-    }
 
     /* --- RENDER --- */
     function fullRender() {
@@ -1153,7 +1131,6 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
         renderCreditAlerts();
         renderShops();
         renderTally();
-        renderCreditGivenShops();
     }
 
     // PRODUCTION-GRADE REFRESH (Fast, doesn't lose focus)
@@ -1163,8 +1140,6 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
         renderStats();
         renderDeliveryMemberLogs();
         renderCreditAlerts();
-        renderCreditGivenShops();
-        updateTallyReconciliationUI();
         renderTally(); // Update the main Tally Sheet UI in real-time
         
         // Update the tiny Shop Sales cash summary too
@@ -1184,83 +1159,64 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
         });
     }
 
-    // Simple legacy shims kept for backward compat with old inline calls
-    // The real per-item functions (with index+field args) are defined below
-    function _updateExpenseLegacy(val) {
-        currentData.expense = Number(val) || 0;
-        saveData();
-        updateTallyReconciliationUI();
-    }
-
-    function _updateExtraIncomeLegacy(val) {
-        currentData.extraIncome = Number(val) || 0;
-        saveData();
-        updateTallyReconciliationUI();
-    }
+    // (updateExpense and updateExtraIncome are defined later with correct multi-arg signatures)
     
     function renderCreditAlerts() {
         const container = document.getElementById('creditCollectionList');
         const card = document.getElementById('creditCollectionCard');
         if(!container || !card) return;
-        container.innerHTML = "";
         
+        container.innerHTML = "";
         let found = false;
         let grandTotalDues = 0;
         const dayData = globalDB[selectedDate] || {};
-        const allCats = Object.keys(dayData);
-
-        // MAINTAIN ENTRY ORDER: Use combined activeShops across all categories first
-        const orderedActive = [];
-        allCats.forEach(cat => {
-            if(dayData[cat].activeShops) {
-                dayData[cat].activeShops.forEach(s => {
-                    if(!orderedActive.includes(s)) orderedActive.push(s);
-                });
+        
+        // 1. Get ALL unique shops that have activity today or past dues
+        const allShopsSet = new Set(Object.keys(pastDuesCache));
+        const cats = ['PACKET', 'LOOSE'];
+        cats.forEach(cat => {
+            if(dayData[cat] && dayData[cat].activeShops) {
+                dayData[cat].activeShops.forEach(s => allShopsSet.add(s));
             }
         });
         
-        // Append shops that have past dues but were NOT active today
-        const shopsWithPastDues = Object.keys(pastDuesCache).filter(s => !orderedActive.includes(s));
-        const relevantShops = [...orderedActive, ...shopsWithPastDues];
+        const sortedShops = Array.from(allShopsSet).sort();
+        let shopIdx = 0;
 
-        relevantShops.forEach((shop, shopIdx) => {
-            // 1. Calculate Past Dues (From Cache)
-            const pastDues = pastDuesCache[shop] || 0;
-            
-            // 2. Calculate Today's Balances (Global across categories)
+        sortedShops.forEach(shop => {
+            const pastDues = Number(pastDuesCache[shop]) || 0;
             let todaySaleVal = 0;
             let todayCash = 0;
             let todayCreditOnly = 0;
-            let shopDriver = null;
+            let currentDriverName = null;
 
-            allCats.forEach(cat => {
-                const s = globalDB[selectedDate][cat].shops[shop];
-                if(s) {
+            cats.forEach(cat => {
+                const cObj = dayData[cat];
+                if(cObj && cObj.shops && cObj.shops[shop]) {
+                    const sd = cObj.shops[shop];
                     const pD = getPrice(shop, 'dosa');
                     const pA = getPrice(shop, 'appam');
                     
-                    todaySaleVal += ((Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0)) * pD + 
-                                   ((Number(s.appam.sale)||0) + (Number(s.appam.cr)||0)) * pA;
-                    todayCash += Number(s.cashReceived) || 0;
-                    todayCreditOnly += (Number(s.dosa.cr)||0) * pD + (Number(s.appam.cr)||0) * pA;
-                    
-                    if(s.driver) shopDriver = s.driver;
+                    todaySaleVal += ((Number(sd.dosa.sale)||0) + (Number(sd.dosa.cr)||0)) * pD + 
+                                  ((Number(sd.appam.sale)||0) + (Number(sd.appam.cr)||0)) * pA;
+                    todayCash += Number(sd.cashReceived) || 0;
+                    todayCreditOnly += (Number(sd.dosa.cr)||0) * pD + (Number(sd.appam.cr)||0) * pA;
+                    if(sd.driver) currentDriverName = sd.driver;
                 }
             });
-            
-            // Total Current Outstanding
-            const totalDues = pastDues + todaySaleVal - todayCash;
 
-            if(totalDues > 0) {
-                // FILTER: If driver filter is active, only show if this shop belongs to driver today
-                if(selectedDriver && shopDriver !== selectedDriver) return;
+            const totalOutstanding = pastDues + todaySaleVal - todayCash;
+
+            // Display logic: Show if they owe money OR if they got credit today
+            if(totalOutstanding > 0.1 || todayCreditOnly > 0.1) {
+                // Driver Filter: Only hide if we have a filter AND the shop belongs to someone else
+                if(selectedDriver && currentDriverName && currentDriverName !== selectedDriver) return;
 
                 found = true;
-                grandTotalDues += totalDues;
-                
-                const creditInfo = todayCreditOnly > 0 ? `<div style="font-size:9px; color:#b45309; margin-top:2px; font-weight:600">includes ₹${todayCreditOnly} today's credit</div>` : "";
+                grandTotalDues += Math.max(0, totalOutstanding);
+                shopIdx++;
 
-                // Get Breakdown Details
+                const creditTag = todayCreditOnly > 0 ? `<div style="font-size:10px; color:#ef4444; margin-top:4px; font-weight:800; background:#fee2e2; padding:2px 6px; border-radius:4px; display:inline-block">NEW CREDIT: ₹${todayCreditOnly}</div>` : "";
                 const breakdown = getDuesBreakdown(shop, selectedDate);
                 const breakdownHTML = breakdown.map(b => `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid #fef3c7; font-size:11px">
@@ -1268,13 +1224,9 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
                             <span style="color:#64748b; font-weight:700">${new Date(b.date).toLocaleDateString('en-GB', {day:'numeric', month:'short'})}</span>
                             ${b.cash > 0 ? `<span style="font-size:9px; color:var(--success); font-weight:700">Paid ₹${b.cash}</span>` : ''}
                         </div>
-                        <div style="text-align:center">
-                            <span style="color:var(--dosa-color); font-weight:800">${b.dosa}D</span>
-                            <span style="color:var(--appam-color); font-weight:800; margin-left:4px">${b.appam}A</span>
-                        </div>
+                        <div style="text-align:center"><span style="color:var(--dosa-color); font-weight:800">${b.dosa}D</span><span style="color:var(--appam-color); font-weight:800; margin-left:4px">${b.appam}A</span></div>
                         <span style="color:#0f172a; font-weight:800">₹${b.value}</span>
-                    </div>
-                `).join("");
+                    </div>`).join("");
 
                 container.innerHTML += `
                 <div style="margin-bottom:8px; background:#fff; border-radius:12px; border:1px solid #fde68a; overflow:hidden; box-shadow:0 2px 4px rgba(180, 83, 9, 0.05)">
@@ -1284,17 +1236,13 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
                                 ${shop}
                                 <span id="credit-icon-${shopIdx}" style="font-size:9px; transition:0.3s; color:#92400e">▼</span>
                             </div>
-                            ${creditInfo}
+                            ${creditTag}
                         </div>
-                        <span style="color:#b45309; font-weight:800; font-size:15px">₹${totalDues.toFixed(0)}</span>
+                        <span style="color:#b45309; font-weight:800; font-size:15px">₹${Math.max(0, totalOutstanding).toFixed(0)}</span>
                     </div>
                     <div id="credit-detail-${shopIdx}" style="display:none; background:#fffdf5; border-top:1px solid #fef3c7">
                         <div style="padding:4px 0">
-                            <div style="padding:6px 12px; background:#fef3c7; font-size:9px; font-weight:800; color:#92400e; display:flex; justify-content:space-between">
-                                <span>DATE / PAYMENT</span>
-                                <span>PACKETS</span>
-                                <span>Billed Amt</span>
-                            </div>
+                            <div style="padding:6px 12px; background:#fef3c7; font-size:9px; font-weight:800; color:#92400e; display:flex; justify-content:space-between"><span>DATE / PAYMENT</span><span>PACKETS</span><span>Billed Amt</span></div>
                             ${breakdownHTML || '<div style="padding:15px; text-align:center; color:#94a3b8; font-size:11px">No detailed records found</div>'}
                         </div>
                     </div>
@@ -1303,20 +1251,14 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
         });
         
         if(found) {
-            container.innerHTML += `
-            <div style="margin-top:12px; padding-top:10px; border-top:2px dashed #fde68a; display:flex; justify-content:space-between; align-items:center">
+            container.innerHTML += `<div style="margin-top:12px; padding-top:10px; border-top:2px dashed #fde68a; display:flex; justify-content:space-between; align-items:center">
                 <span style="font-size:11px; font-weight:800; color:#92400e">GRAND TOTAL</span>
                 <span style="font-size:18px; font-weight:900; color:#b45309">₹${grandTotalDues.toFixed(0)}</span>
             </div>`;
         }
-
         card.style.display = found ? 'block' : 'none';
-        
-        // Update header if filtered
         const headSpan = card.querySelector('.card-head span:first-child');
-        if(headSpan) {
-            headSpan.innerText = selectedDriver ? `Pending Collections (${selectedDriver})` : "Pending Collections";
-        }
+        if(headSpan) headSpan.innerText = selectedDriver ? `Pending Collections (${selectedDriver})` : "Pending Collections";
     }
     
     function renderStats() {
@@ -1348,7 +1290,9 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
     }
 
     function renderLogs() {
-         const filterHub = (document.getElementById('activeHub') || {value:'ALL'}).value;
+         const activeHubSelect = document.getElementById('activeHub');
+         if (!activeHubSelect) return;
+         const filterHub = activeHubSelect.value;
          const filterDriver = selectedDriver;
          const fTrips = currentData.trips.filter(t => {
              const hubMatch = filterHub === "ALL" || t.hub === filterHub;
@@ -1356,12 +1300,15 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
              return hubMatch && driverMatch;
          });
 
-         const tLog = document.getElementById('tripLogBody'); tLog.innerHTML = "";
-         if(fTrips.length > 0) { document.getElementById('tripLogContainer').style.display="block"; 
-            fTrips.forEach(t => tLog.innerHTML += `<tr><td><span class="badge" style="background:#f1f5f9;color:#64748b">${t.hub.slice(0,3)}</span></td><td>${t.driver}</td><td style="text-align:right">${t.dosa}</td><td style="text-align:right">${t.appam}</td><td style="text-align:right"><button class="btn-del" style="background:#e0f2fe; color:#0369a1; margin-right:4px" onclick="editTrip('${t.id}')">✎</button><button class="btn-del" onclick="deleteTrip('${t.id}')">×</button></td></tr>`); 
-         } else { document.getElementById('tripLogContainer').style.display="none"; }
-
-
+         const tLog = document.getElementById('tripLogBody'); 
+         if (!tLog) return;
+         tLog.innerHTML = "";
+         if (fTrips.length > 0) { 
+             document.getElementById('tripLogContainer').style.display = "block"; 
+             fTrips.forEach(t => tLog.innerHTML += `<tr><td><span class="badge" style="background:#f1f5f9;color:#64748b">${t.hub.slice(0,3)}</span></td><td>${t.driver}</td><td style="text-align:right">${t.dosa}</td><td style="text-align:right">${t.appam}</td><td style="text-align:right"><button class="btn-del" style="background:#e0f2fe; color:#0369a1; margin-right:4px" onclick="editTrip('${t.id}')">✎</button><button class="btn-del" onclick="deleteTrip('${t.id}')">×</button></td></tr>`); 
+         } else { 
+             document.getElementById('tripLogContainer').style.display = "none"; 
+         }
      }
 
      function renderDeliveryMemberLogs() {
@@ -1494,57 +1441,60 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
     function renderShops() {
         const container = document.getElementById('shopsContainer'); 
         if(!container) return;
-        container.innerHTML = "";
+        
+        // --- 1. PRE-RENDER STATE SNAPSHOT ---
+        const expandedIds = Array.from(container.querySelectorAll('.card.expanded')).map(el => el.id);
+        const activeTabInfo = {}; // { shopIdx: 'dosa'|'appam' }
+        container.querySelectorAll('.card').forEach(card => {
+            const idxMatch = card.id.match(/\d+$/);
+            if (idxMatch) {
+                const idx = idxMatch[0];
+                const activeTab = card.querySelector('.tab-btn.active-dosa, .tab-btn.active-appam');
+                if (activeTab) {
+                    activeTabInfo[idx] = activeTab.innerText.toLowerCase().trim();
+                }
+            }
+        });
+
+        const activeElement = document.activeElement;
+        let focusedFieldId = null;
+        let cursorStart = 0, cursorEnd = 0;
+        
+        if (activeElement && container.contains(activeElement)) {
+            focusedFieldId = activeElement.dataset.focusId || activeElement.id;
+            if (activeElement.tagName === 'INPUT') {
+                cursorStart = activeElement.selectionStart;
+                cursorEnd = activeElement.selectionEnd;
+            }
+        }
         
         const filterDriver = selectedDriver;
-        const searchVal = (document.getElementById('shopSearch')?.value || "").toLowerCase().trim();
+        const searchInput = document.getElementById('shopSearch');
+        const searchVal = (searchInput?.value || "").toLowerCase().trim();
         
-        // Safety Check: If no driver is selected, display a warning placeholder
         if(!filterDriver) {
-            container.innerHTML = `
-                <div class="card" style="border:1px dashed #4f46e5; background:#eef2ff; padding:32px 20px; text-align:center; box-shadow:none; margin-bottom:24px">
-                    <div style="font-size:32px; margin-bottom:16px">👤</div>
-                    <div style="font-weight:800; color:var(--primary); font-size:15px; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px">Select Driver First</div>
-                    <div style="color:#64748b; font-size:13px; line-height:1.5; max-width:280px; margin:0 auto">
-                        Please tap on a <b>Driver Name</b> from the top menu to view and enter sales for their assigned shops.
-                    </div>
-                </div>
-            `;
+            container.innerHTML = `<div class="card" style="border:1px dashed #4f46e5; background:#eef2ff; padding:32px 20px; text-align:center; box-shadow:none; margin-bottom:24px"> Select Driver First... </div>`;
             return;
         }
         
-        // Find hubs the selected driver visited today
-        const fTrips = currentData.trips.filter(t => t.driver === filterDriver);
-        const driversHubs = Array.from(new Set(fTrips.map(t => t.hub)));
-
         let shownCount = 0;
-        // SORTING FIX: If no search, use activeShops order. If searching, use full SHOP_LIST
         const listToIterate = searchVal ? SHOP_LIST : (currentData.activeShops || []);
+        let htmlBuffer = "";
         
-        listToIterate.forEach((shop) => {
+        listToIterate.forEach((shop, i) => {
             const idx = SHOP_LIST.indexOf(shop);
             if(idx === -1 || !currentData.shops[shop]) return;
             
-            // Search Filter
             const matchesSearch = !searchVal || shop.toLowerCase().includes(searchVal);
             if(!matchesSearch) return;
 
             const data = currentData.shops[shop];
             const hasActivity = (data.dosa.sale || data.dosa.cr || data.appam.sale || data.appam.cr || data.cashReceived);
-            
-            // Driver Isolation
-            if(filterDriver) {
-                const isAssignedToOther = hasActivity && data.driver && data.driver !== filterDriver;
-                if(isAssignedToOther) return;
-            }
-
-            // DASHBOARD CLEANUP: Only show shops with activity, or matches when searching
+            if(filterDriver && hasActivity && data.driver && data.driver !== filterDriver) return;
             if (!searchVal && !hasActivity) return;
 
             const pD = getPrice(shop, 'dosa');
             const pA = getPrice(shop, 'appam');
-            
-            // Calculate TODAY'S TOTAL SALE across all categories
             let totalValToday = 0;
             const dayData = globalDB[selectedDate] || {};
             Object.keys(dayData).forEach(cat => {
@@ -1555,10 +1505,13 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
                 }
             });
             
-            if(shownCount >= 50) return; // Cap results
-
+            if(shownCount >= 50) return;
             shownCount++;
-            container.innerHTML += `
+            
+            // Determine initial tab state
+            const prefTab = activeTabInfo[idx] || 'dosa';
+
+            htmlBuffer += `
             <div class="card ${hasActivity ? 'completed' : ''}" id="card-shop-${idx}">
                 <div class="shop-header" onclick="toggleShop(${idx})">
                     <div class="shop-name">${shownCount}. ${shop}</div>
@@ -1566,27 +1519,26 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
                 </div>
                 <div class="shop-body">
                     <div class="prod-tabs">
-                        <div class="tab-btn active-dosa" id="tab-dosa-${idx}" onclick="switchTab(${idx},'dosa')">Dosa</div>
-                        <div class="tab-btn" id="tab-appam-${idx}" onclick="switchTab(${idx},'appam')">Appam</div>
+                        <div class="tab-btn ${prefTab==='dosa'?'active-dosa':''}" id="tab-dosa-${idx}" onclick="switchTab(${idx},'dosa')">Dosa</div>
+                        <div class="tab-btn ${prefTab==='appam'?'active-appam':''}" id="tab-appam-${idx}" onclick="switchTab(${idx},'appam')">Appam</div>
                     </div>
-                    <div id="panel-dosa-${idx}" class="input-panel active">
+                    <div id="panel-dosa-${idx}" class="input-panel ${prefTab==='dosa'?'active':''}">
                         <div class="input-grid">
-                            <div><label>Sale</label><input type="number" class="qty-input sale" oninput="updateShopData('${shop}','dosa','sale',this.value)" value="${data.dosa.sale}"></div>
-                            <div><label>Credit</label><input type="number" class="qty-input cred" oninput="updateShopData('${shop}','dosa','cr',this.value)" value="${data.dosa.cr}"></div>
-                            <div><label>Dmg</label><input type="number" class="qty-input" oninput="updateShopData('${shop}','dosa','dmg',this.value)" value="${data.dosa.dmg}"></div>
-                            <div><label>Free</label><input type="number" class="qty-input" oninput="updateShopData('${shop}','dosa','free',this.value)" value="${data.dosa.free}"></div>
+                            <div><label>Sale</label><input type="number" class="qty-input sale" data-focus-id="sale-dosa-${idx}" oninput="updateShopData('${shop}','dosa','sale',this.value)" value="${data.dosa.sale}"></div>
+                            <div><label>Credit</label><input type="number" class="qty-input cred" data-focus-id="cr-dosa-${idx}" oninput="updateShopData('${shop}','dosa','cr',this.value)" value="${data.dosa.cr}"></div>
+                            <div><label>Dmg</label><input type="number" class="qty-input" data-focus-id="dmg-dosa-${idx}" oninput="updateShopData('${shop}','dosa','dmg',this.value)" value="${data.dosa.dmg}"></div>
+                            <div><label>Free</label><input type="number" class="qty-input" data-focus-id="free-dosa-${idx}" oninput="updateShopData('${shop}','dosa','free',this.value)" value="${data.dosa.free}"></div>
                         </div>
                     </div>
-                    <div id="panel-appam-${idx}" class="input-panel">
+                    <div id="panel-appam-${idx}" class="input-panel ${prefTab==='appam'?'active':''}">
                         <div class="input-grid">
-                            <div><label>Sale</label><input type="number" class="qty-input sale" oninput="updateShopData('${shop}','appam','sale',this.value)" value="${data.appam.sale}"></div>
-                            <div><label>Credit</label><input type="number" class="qty-input cred" oninput="updateShopData('${shop}','appam','cr',this.value)" value="${data.appam.cr}"></div>
-                            <div><label>Dmg</label><input type="number" class="qty-input" oninput="updateShopData('${shop}','appam','dmg',this.value)" value="${data.appam.dmg}"></div>
-                            <div><label>Free</label><input type="number" class="qty-input" oninput="updateShopData('${shop}','appam','free',this.value)" value="${data.appam.free}"></div>
+                            <div><label>Sale</label><input type="number" class="qty-input sale" data-focus-id="sale-appam-${idx}" oninput="updateShopData('${shop}','appam','sale',this.value)" value="${data.appam.sale}"></div>
+                            <div><label>Credit</label><input type="number" class="qty-input cred" data-focus-id="cr-appam-${idx}" oninput="updateShopData('${shop}','appam','cr',this.value)" value="${data.appam.cr}"></div>
+                            <div><label>Dmg</label><input type="number" class="qty-input" data-focus-id="dmg-appam-${idx}" oninput="updateShopData('${shop}','appam','dmg',this.value)" value="${data.appam.dmg}"></div>
+                            <div><label>Free</label><input type="number" class="qty-input" data-focus-id="free-appam-${idx}" oninput="updateShopData('${shop}','appam','free',this.value)" value="${data.appam.free}"></div>
                         </div>
                     </div>
                     
-                    <!-- Cash Received Section -->
                     <div style="margin-top:16px; padding:12px; background:white; border-radius:8px; border:1px solid #e2e8f0">
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px">
                             <div style="background:#fffbeb; padding:8px; border-radius:6px; border:1px solid #fde68a">
@@ -1601,6 +1553,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
                         <div style="margin-bottom:12px">
                             <label style="font-size:10px; font-weight:700; color:#64748b; display:block; margin-bottom:4px">TOTAL CASH RECEIVED</label>
                             <input type="number" class="qty-input" style="width:100%; font-size:16px; font-weight:700; background:#f8fafc" 
+                                data-focus-id="cash-${idx}"
                                 oninput="updateCashReceived('${shop}', this.value, ${idx})" 
                                 value="${data.cashReceived || ''}" placeholder="Enter amount...">
                         </div>
@@ -1609,21 +1562,28 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
                             <div style="font-size:18px; font-weight:800" id="balance-${idx}">₹0</div>
                         </div>
                     </div>
-                    
                     <button class="save-btn" onclick="toggleShop(${idx})">Done</button>
                 </div>
             </div>`;
         });
         
-        if(shownCount === 0) {
-            if(searchVal) {
-                 container.innerHTML = `<div style="text-align:center; padding:40px; color:#94a3b8; font-size:13px; background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1">No matching shops found</div>`;
-            } else {
-                 container.innerHTML = `<div style="text-align:center; padding:40px; color:#94a3b8; font-size:13px; background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1">Use search to find shops<br><span style="font-size:11px; opacity:0.7">Only active shops are shown here</span></div>`;
+        if(!htmlBuffer) htmlBuffer = `<div style="text-align:center; padding:40px; color:#94a3b8; font-size:13px; background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1">No shops found</div>`;
+        container.innerHTML = htmlBuffer;
+        
+        // --- 2. RESTORE UI STATE ---
+        expandedIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('expanded');
+        });
+        
+        if (focusedFieldId) {
+            const target = container.querySelector(`[data-focus-id="${focusedFieldId}"]`);
+            if (target) {
+                target.focus();
+                if (target.tagName === 'INPUT') target.setSelectionRange(cursorStart, cursorEnd);
             }
         }
-        
-        // Update all balances after render
+
         SHOP_LIST.forEach((shop, idx) => {
             if(currentData.shops[shop]) updateShopBalance(shop, idx);
         });
@@ -2106,58 +2066,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
         `;
     }
 
-    // ── SYNC WINDOW ──────────────────────────────────────────────
-    // Defined HERE (after all vars/functions) so closures capture live references.
-    // Called after init and after every state change so window always has fresh handles.
-    function syncWindow() {
-        window.globalDB        = globalDB;
-        window.currentData     = currentData;
-        window.selectedDate    = selectedDate;
-        window.currentCategory = currentCategory;
-        window.selectedDriver  = selectedDriver;
-        window.activeSection   = activeSection;
-        window.SHOP_LIST       = SHOP_LIST;
-        window.SHOP_PRICES     = SHOP_PRICES;
-
-        // UI Actions
-        window.toggleSidebar      = toggleSidebar;
-        window.switchSection      = switchSection;
-        window.resetAllData       = resetAllData;
-        window.setCategory        = setCategory;
-        window.loadDate           = loadDate;
-        window.setGlobalDriver    = setGlobalDriver;
-        window.fullRender         = fullRender;
-        window.renderShops        = renderShops;
-
-        // Trip ops
-        window.addTrip    = addTrip;
-        window.editTrip   = editTrip;
-        window.deleteTrip = deleteTrip;
-
-        // Shop ops
-        window.updateShopData    = updateShopData;
-        window.updateCashReceived = updateCashReceived;
-        window.updateShopBalance  = updateShopBalance;
-        window.toggleShop         = toggleShop;
-        window.toggleCreditDetail = toggleCreditDetail;
-        window.switchTab          = switchTab;
-
-        // Tally / Cash ops
-        window.addExpense        = addExpense;
-        window.updateExpense     = updateExpense;       // per-item (idx, field, val)
-        window.deleteExpense     = deleteExpense;
-        window.addExtraIncome    = addExtraIncome;
-        window.updateExtraIncome = updateExtraIncome;  // per-item (idx, field, val)
-        window.deleteExtraIncome = deleteExtraIncome;
-        window.updateCashInHand  = updateCashInHand;
-        window.updateDenom       = updateDenom;
-
-        // Member logs
-        window.toggleMemberLog = toggleMemberLog;
-
-        // Firebase sync shortcut
-        window.syncRouteData = saveData;
-    }
-
+    // All functions are now automatically global in the non-module script.
+    console.log("IyersRoute V3.1 Script Loaded.");
 </script>
 </html>
