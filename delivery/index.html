@@ -572,8 +572,23 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
             workDateEl.onchange = () => loadDate(workDateEl.value);
         }
 
+        // --- RESTORE PERSISTED SELECTIONS (Driver & Hub) ---
+        const savedDriver = localStorage.getItem('IYERS_SELECTED_DRIVER') || '';
+        const savedHub    = localStorage.getItem('IYERS_SELECTED_HUB')    || 'ALL';
+
         const activeHubEl = document.getElementById('activeHub');
-        if (activeHubEl) activeHubEl.onchange = fullRender;
+        if (activeHubEl) {
+            activeHubEl.value = savedHub;
+            activeHubEl.onchange = () => {
+                localStorage.setItem('IYERS_SELECTED_HUB', activeHubEl.value);
+                fullRender();
+            };
+        }
+
+        // Restore driver (sets selectedDriver + syncs both selects)
+        selectedDriver = savedDriver;
+        const globalDriverEl = document.getElementById('globalDriverSelect');
+        if (globalDriverEl) globalDriverEl.value = savedDriver;
         
         // Setup Trip Edit Mode State
         window.editState = { trip: null };
@@ -581,6 +596,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
         // Sync Trip Driver dropdown to Global Filter
         const tripDriverEl = document.getElementById('tripDriver');
         if (tripDriverEl) {
+            tripDriverEl.value = savedDriver;
             tripDriverEl.onchange = () => {
                 setGlobalDriver(tripDriverEl.value);
                 fullRender();
@@ -678,6 +694,8 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
 
     function setGlobalDriver(driver) {
         selectedDriver = driver;
+        // Persist selection so it survives page refresh
+        localStorage.setItem('IYERS_SELECTED_DRIVER', driver);
         const select = document.getElementById('globalDriverSelect');
         if(select) select.value = driver;
         
