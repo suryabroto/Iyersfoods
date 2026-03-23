@@ -1060,8 +1060,8 @@
                 if (s) {
                     const pD = getPrice(shop, 'dosa');
                     const pA = getPrice(shop, 'appam');
-                    todaySale += ((Number(s.dosa.sale) || 0) + (Number(s.dosa.cr) || 0)) * pD +
-                                 ((Number(s.appam.sale) || 0) + (Number(s.appam.cr) || 0)) * pA;
+                    todaySale += (Number(s.dosa.sale) || 0) * pD +
+                                 (Number(s.appam.sale) || 0) * pA;
                     cashRec += Number(s.cashReceived) || 0;
                 }
             });
@@ -1102,8 +1102,8 @@
             if(s) {
                 const pD = getPrice(shop, 'dosa');
                 const pA = getPrice(shop, 'appam');
-                totalValToday += ((Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0)) * pD + 
-                                 ((Number(s.appam.sale)||0) + (Number(s.appam.cr)||0)) * pA;
+                totalValToday += (Number(s.dosa.sale)||0) * pD + 
+                                 (Number(s.appam.sale)||0) * pA;
                 totalCashToday += Number(s.cashReceived) || 0;
                 if(s.dosa.sale || s.dosa.cr || s.appam.sale || s.appam.cr || s.cashReceived) hasActivity = true;
                 if(s.driver) shopDriver = s.driver;
@@ -1519,8 +1519,8 @@
             Object.keys(dayData).forEach(cat => {
                 const s = dayData[cat].shops[shop];
                 if(s) {
-                    totalValToday += ((Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0)) * pD + 
-                                     ((Number(s.appam.sale)||0) + (Number(s.appam.cr)||0)) * pA;
+                    totalValToday += (Number(s.dosa.sale)||0) * pD + 
+                                     (Number(s.appam.sale)||0) * pA;
                 }
             });
             
@@ -1842,9 +1842,9 @@
             if(creditVal > 0) stats.credits.push({ name: shop, value: creditVal });
         });
 
-        // 5. Calculate Final Tally Fields
-        const dOut = stats.dosa.sold + stats.dosa.credit + stats.dosa.free + stats.dosa.dmg;
-        const aOut = stats.appam.sold + stats.appam.credit + stats.appam.free + stats.appam.dmg;
+        // 5. Calculate Final Tally Fields (DAMAGE removed from deduction logic)
+        const dOut = stats.dosa.sold + stats.dosa.credit + stats.dosa.free;
+        const aOut = stats.appam.sold + stats.appam.credit + stats.appam.free;
 
         stats.dosa.balance = stats.dosa.load - dOut;
         stats.appam.balance = stats.appam.load - aOut;
