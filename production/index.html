@@ -903,7 +903,7 @@ function calculateDailyMovement(date, shopFilter, productFilter) {
             
             if(typeKey === 'ret') {
                 if(item.action === 'RETURN') stats += q; 
-                else stats -= q; 
+                // DAMAGE is no longer deducted from stock
                 return;
             }
 
@@ -965,7 +965,7 @@ function getClientBalances(dateLimit, shop, product) {
                     else b.dmg += val;
                 } else {
                     if (r.action === 'RETURN') b.opening += val;
-                    else b.opening -= val;
+                    // DAMAGE is no longer deducted from opening balance
                 }
             }
         });
@@ -1321,7 +1321,7 @@ function render() {
 
         Object.keys(clientBalances).sort().forEach(c => {
             const b = clientBalances[c];
-            const closing = (b.opening + b.prod) - (b.disp - b.ret + b.dmg);
+            const closing = (b.opening + b.prod) - (b.disp - b.ret); // DAMAGE removed from deduction logic
             if (closing < 0) criticalErrors.push(`${c}: Excess Dispatch (${Math.abs(closing)}L)`);
             else if (closing > 0) pendingStock.push({ name: c, qty: closing });
         });
