@@ -291,13 +291,6 @@
              </div>
              
              <div class="top-controls">
-                 <select id="activeHub" class="top-select">
-                    <option value="ALL">All Hubs</option>
-                    <option value="Nettor">Nettor Shop </option>
-                    <option value="Kannankulangara">Kannankulangara Shop</option>
-                    <option value="Vadakkekotta">Vadakkekotta Shop</option>
-                 </select>
-                 
                  <select id="globalDriverSelect" class="top-select" onchange="setGlobalDriver(this.value)">
                     <option value="">All Drivers</option>
                     <option>Udhayamperoor</option><option>Kakkanad</option><option>Kadavanthra</option><option>Nettor</option>
@@ -418,7 +411,13 @@
             <span style="font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px">STOCK IN</span>
         </div>
         <div class="trip-form">
-            <div style="margin-bottom:12px">
+            <div style="margin-bottom:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px">
+                <select id="activeHub">
+                    <option value="ALL">All Hubs</option>
+                    <option value="Nettor">Nettor Shop </option>
+                    <option value="Kannankulangara">Kannankulangara Shop</option>
+                    <option value="Vadakkekotta">Vadakkekotta Shop</option>
+                </select>
                 <select id="tripDriver">
                     <option value="">Select Driver...</option>
                     <option>Udhayamperoor</option><option>Kakkanad</option><option>Kadavanthra</option><option>Nettor</option>
@@ -837,16 +836,32 @@
         fullRender();
     }
 
+    function getLastDriver(shopName, targetDate) {
+        const dates = Object.keys(globalDB).sort().reverse();
+        for (const d of dates) {
+            if (d > targetDate) continue;
+            const dayDataObj = globalDB[d];
+            if (!dayDataObj) continue;
+            const cats = ['PACKET', 'LOOSE'];
+            for (const cat of cats) {
+                if (dayDataObj[cat]?.shops?.[shopName]?.driver) return dayDataObj[cat].shops[shopName].driver;
+            }
+        }
+        return null;
+    }
+
     function initShopDataForDate(date) {
         SHOP_LIST.forEach(shop => {
             if (!currentData.shops[shop]) {
                 currentData.shops[shop] = {
                     dosa: { sale: '', cr: '', dmg: '', free: '' },
                     appam: { sale: '', cr: '', dmg: '', free: '' },
-                    cashReceived: ''
+                    cashReceived: '',
+                    gpayReceived: ''
                 };
-            } else if (!currentData.shops[shop].cashReceived) {
-                currentData.shops[shop].cashReceived = '';
+            } else {
+                if (!currentData.shops[shop].cashReceived) currentData.shops[shop].cashReceived = '';
+                if (!currentData.shops[shop].gpayReceived) currentData.shops[shop].gpayReceived = '';
             }
         });
         if (!currentData.tally) {
@@ -1046,11 +1061,29 @@
         updateShopBalance(shop, idx);
         refreshDynamicUI();
     }
+
+    function updateGpayReceived(shop, val, idx) {
+        if(!selectedDriver) {
+            alert("⚠️ PLEASE SELECT A DRIVER FIRST!\n\nEvery driver delivers to different shops. Please select a driver from the chips above before entering sales data.");
+            renderShops();
+            return;
+        }
+        if(!currentData.activeShops) currentData.activeShops = [];
+        if(!currentData.activeShops.includes(shop)) currentData.activeShops.push(shop);
+
+        currentData.shops[shop].gpayReceived = val;
+        if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
+        saveData();
+        updateShopRowUI(shop); 
+        updateShopBalance(shop, idx);
+        refreshDynamicUI();
+    }
     
     function updateShopBalance(shop, idx) {
         const prevDues = getPendingBalance(shop, selectedDate);
         let todaySale = 0;
         let cashRec = 0;
+        let gpayRec = 0;
 
         // Sum data from ALL categories for this shop
         const dayData = globalDB[selectedDate];
@@ -1063,12 +1096,13 @@
                     todaySale += (Number(s.dosa.sale) || 0) * pD +
                                  (Number(s.appam.sale) || 0) * pA;
                     cashRec += Number(s.cashReceived) || 0;
+                    gpayRec += Number(s.gpayReceived) || 0;
                 }
             });
         }
 
         const totalTarget = prevDues + todaySale;
-        const balance = totalTarget - cashRec;
+        const balance = totalTarget - cashRec - gpayRec;
         
         const balEl = document.getElementById(`balance-${idx}`);
         const totEl = document.getElementById(`total-${idx}`);
@@ -1228,8 +1262,9 @@
 
             // Display logic: Show if they owe money OR if they got credit today
             if(totalOutstanding > 0.1 || todayCreditOnly > 0.1) {
-                // Driver Filter: Only hide if we have a filter AND the shop belongs to someone else
-                if(selectedDriver && currentDriverName && currentDriverName !== selectedDriver) return;
+                // Driver Filter: Only show if it belongs to the selected route
+                const ownerDriver = currentDriverName || getLastDriver(shop, selectedDate);
+                if(selectedDriver && ownerDriver && ownerDriver !== selectedDriver) return;
 
                 found = true;
                 grandTotalDues += Math.max(0, totalOutstanding);
@@ -1571,10 +1606,17 @@
                         </div>
                         <div style="margin-bottom:12px">
                             <label style="font-size:10px; font-weight:700; color:#64748b; display:block; margin-bottom:4px">TOTAL CASH RECEIVED</label>
-                            <input type="number" class="qty-input" style="width:100%; font-size:16px; font-weight:700; background:#f8fafc" 
+                            <input type="number" class="qty-input" style="width:100%; font-size:16px; font-weight:700; background:#f0fdf4; border-color:#86efac" 
                                 data-focus-id="cash-${idx}"
                                 oninput="updateCashReceived('${shop}', this.value, ${idx})" 
-                                value="${data.cashReceived || ''}" placeholder="Enter amount...">
+                                value="${data.cashReceived || ''}" placeholder="Enter cash amount...">
+                        </div>
+                        <div style="margin-bottom:12px">
+                            <label style="font-size:10px; font-weight:700; color:#64748b; display:block; margin-bottom:4px">TOTAL GPAY RECEIVED</label>
+                            <input type="number" class="qty-input" style="width:100%; font-size:16px; font-weight:700; background:#eff6ff; border-color:#93c5fd" 
+                                data-focus-id="gpay-${idx}"
+                                oninput="updateGpayReceived('${shop}', this.value, ${idx})" 
+                                value="${data.gpayReceived || ''}" placeholder="Enter Gpay amount...">
                         </div>
                         <div style="padding:10px; background:#f1f5f9; border-radius:6px; text-align:center; border:1px solid #e2e8f0">
                             <div style="font-size:9px; font-weight:700; color:#64748b; margin-bottom:2px">CLOSING BALANCE</div>
@@ -1727,8 +1769,11 @@
             appam: { load: 0, sold: 0, credit: 0, free: 0, dmg: 0, balance: 0, finalTotal: 0 },
             credits: [],
             totalCashCollected: 0,
+            totalGpayCollected: 0,
             cashPacket: 0,
             cashLoose: 0,
+            gpayPacket: 0,
+            gpayLoose: 0,
             totalExpenses: 0,
             totalExtraIncome: 0,
             totalOutstanding: 0,
@@ -1800,11 +1845,19 @@
                     stats.appam.free += aFree;
                 }
 
-                // Cash Collected
-            const cash = (Number(s.cashReceived) || 0);
-            stats.totalCashCollected += cash;
-            if(cat === 'PACKET') stats.cashPacket += cash;
-            else if(cat === 'LOOSE') stats.cashLoose += cash;
+                // Cash & Gpay Collected
+                const cash = (Number(s.cashReceived) || 0);
+                const gpay = (Number(s.gpayReceived) || 0);
+                stats.totalCashCollected += cash;
+                stats.totalGpayCollected += gpay;
+                
+                if(cat === 'PACKET') {
+                    stats.cashPacket += cash;
+                    stats.gpayPacket += gpay;
+                } else if(cat === 'LOOSE') {
+                    stats.cashLoose += cash;
+                    stats.gpayLoose += gpay;
+                }
                 
                 allShopsSet.add(shop);
             });
@@ -1817,8 +1870,9 @@
             let shopCashRec = 0;
             let dCrTotal = 0;
             let aCrTotal = 0;
+            let currentShopDriver = null;
             
-                Object.keys(dayData).forEach(cat => {
+            Object.keys(dayData).forEach(cat => {
                 // If in category-specific mode (Loose), only look at Loose data for this shop
                 if(currentCategory !== 'PACKET' && cat !== currentCategory) return;
 
@@ -1828,18 +1882,22 @@
                     const pA = getPrice(shop, 'appam');
                     todaySaleVal += ((Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0)) * pD + 
                                    ((Number(s.appam.sale)||0) + (Number(s.appam.cr)||0)) * pA;
-                    shopCashRec += (Number(s.cashReceived) || 0);
+                    shopCashRec += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
                     if (cat === currentCategory) {
                         dCrTotal += (Number(s.dosa.cr)||0);
                         aCrTotal += (Number(s.appam.cr)||0);
                     }
+                    if (s.driver) currentShopDriver = s.driver;
                 }
             });
             
-            stats.totalOutstanding += (prevDues + todaySaleVal - shopCashRec);
-            
-            const creditVal = (dCrTotal * getPrice(shop, 'dosa')) + (aCrTotal * getPrice(shop, 'appam'));
-            if(creditVal > 0) stats.credits.push({ name: shop, value: creditVal });
+            const ownerDriver = currentShopDriver || getLastDriver(shop, selectedDate);
+            if (!filterDriver || ownerDriver === filterDriver) {
+                stats.totalOutstanding += (prevDues + todaySaleVal - shopCashRec);
+                
+                const creditVal = (dCrTotal * getPrice(shop, 'dosa')) + (aCrTotal * getPrice(shop, 'appam'));
+                if(creditVal > 0) stats.credits.push({ name: shop, value: creditVal });
+            }
         });
 
         // 5. Calculate Final Tally Fields (DAMAGE removed from deduction logic)
@@ -1986,17 +2044,33 @@
                         <span style="color:#64748b; font-size:11px; font-weight:600">Total Cash (LOOSE)</span>
                         <span style="font-weight:700; color:#0f172a">₹${stats.cashLoose}</span>
                     </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px; padding-top:8px; border-top:1px solid #e2e8f0">
+                        <span style="color:#334155; font-weight:700">Total Cash Collected</span>
+                        <span style="font-weight:800; color:#0f172a">₹${stats.totalCashCollected}</span>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; padding-top:12px; border-top:2px dashed #cbd5e1">
+                        <span style="color:#64748b; font-size:11px; font-weight:600">Total Gpay (PACKETS)</span>
+                        <span style="font-weight:700; color:#4f46e5">₹${stats.gpayPacket}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px">
+                        <span style="color:#64748b; font-size:11px; font-weight:600">Total Gpay (LOOSE)</span>
+                        <span style="font-weight:700; color:#4f46e5">₹${stats.gpayLoose}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px">
+                        <span style="color:#4f46e5; font-weight:700">Total Gpay Collected</span>
+                        <span style="font-weight:800; color:#4f46e5">₹${stats.totalGpayCollected}</span>
+                    </div>
                     ` : `
                     <div style="display:flex; justify-content:space-between; margin-bottom:12px">
                         <span style="color:#64748b; font-size:11px; font-weight:600">Total Cash (LOOSE)</span>
                         <span style="font-weight:700; color:#0f172a">₹${stats.cashLoose}</span>
                     </div>
-                    `}
-                    
-                    <div style="display:flex; justify-content:space-between; margin-bottom:8px; padding-top:8px; border-top:1px solid #e2e8f0">
-                        <span style="color:#334155; font-weight:700">Total Cash Collected</span>
-                        <span style="font-weight:800; color:#0f172a">₹${stats.totalCashCollected}</span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px">
+                        <span style="color:#64748b; font-size:11px; font-weight:600">Total Gpay (LOOSE)</span>
+                        <span style="font-weight:700; color:#4f46e5">₹${stats.gpayLoose}</span>
                     </div>
+                    `}
                     ${stats.totalExtraIncome > 0 ? `
                     <div style="display:flex; justify-content:space-between; margin-bottom:8px">
                         <span style="color:#64748b; font-weight:600">Extra Income</span>
