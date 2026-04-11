@@ -293,7 +293,6 @@
              <div class="top-controls">
                  <select id="globalDriverSelect" class="top-select" onchange="setGlobalDriver(this.value)">
                     <option value="">All Drivers</option>
-                    <option>Udhayamperoor</option><option>Kakkanad</option><option>Kadavanthra</option><option>Nettor</option>
                  </select>
             
                  <div class="date-pill">
@@ -420,7 +419,6 @@
                 </select>
                 <select id="tripDriver">
                     <option value="">Select Driver...</option>
-                    <option>Udhayamperoor</option><option>Kakkanad</option><option>Kadavanthra</option><option>Nettor</option>
                 </select>
             </div>
             <div class="form-grid">
@@ -631,45 +629,40 @@
         });
     }
 
-    /* ---- LOAD CLIENTS FROM FIRESTORE (with localStorage cache fallback) ---- */
-    async function loadClients() {
+    /* ---- LOAD CLIENTS FROM FIRESTORE (with real-time sync) ---- */
+    function loadClients() {
+        // Step 1: Initial load from localStorage for speed
         const rawClient = localStorage.getItem(CLIENT_DB_KEY);
         if (rawClient) {
             try {
                 const clients = JSON.parse(rawClient);
-                SHOP_LIST = clients.map(c => c.name);
-                SHOP_PRICES = {};
-                clients.forEach(c => {
-                    SHOP_PRICES[c.name] = { pd: Number(c.pd), pa: Number(c.pa) };
-                });
+                updateClientState(clients);
             } catch(e) {}
         }
 
-        // Fetch from Firestore and update cache (Compat Style)
-        try {
-            // FIXED: Use the shared 'data/clients' document instead of separate root collection
-            const snap = await db.collection("data").doc("clients").get();
+        // Step 2: Real-time listener
+        db.collection("data").doc("clients").onSnapshot((snap) => {
             if (snap.exists) {
                 const clients = snap.data().list || [];
-                // Sort or handle as needed (Production app might have different sorting)
-                // clients.sort((a, b) => (a.routeIndex || 0) - (b.routeIndex || 0));
-                SHOP_LIST = clients.map(c => typeof c === 'string' ? c : c.name);
-                SHOP_PRICES = {};
-                clients.forEach(c => {
-                    const name = typeof c === 'string' ? c : c.name;
-                    SHOP_PRICES[name] = { 
-                        pd: Number(c.pd) || DEFAULT_PRICES.dosa, 
-                        pa: Number(c.pa) || DEFAULT_PRICES.appam 
-                    };
-                });
+                updateClientState(clients);
                 localStorage.setItem(CLIENT_DB_KEY, JSON.stringify(clients));
-                if (selectedDate) {
-                    initShopDataForDate(selectedDate);
-                    fullRender();
-                }
             }
-        } catch (err) {
-            console.warn("Could not fetch clients from Firestore, using local cache:", err);
+        });
+    }
+
+    function updateClientState(clients) {
+        SHOP_LIST = clients.map(c => typeof c === 'string' ? c : c.name);
+        SHOP_PRICES = {};
+        clients.forEach(c => {
+            const name = typeof c === 'string' ? c : c.name;
+            SHOP_PRICES[name] = { 
+                pd: Number(c.pd) || DEFAULT_PRICES.dosa, 
+                pa: Number(c.pa) || DEFAULT_PRICES.appam 
+            };
+        });
+        if (selectedDate) {
+            initShopDataForDate(selectedDate);
+            fullRender();
         }
     }
 
@@ -678,6 +671,29 @@
             return type === 'dosa' ? SHOP_PRICES[shop].pd : SHOP_PRICES[shop].pa;
         }
         return DEFAULT_PRICES[type];
+    }
+
+    function loadStaff() {
+        db.collection("data").doc("staff").onSnapshot((snap) => {
+            if(snap.exists) {
+                const list = snap.data().list || [];
+                const drivers = list.filter(s => s.type === 'DELIVERY').map(s => s.name).sort();
+                
+                const gds = document.getElementById('globalDriverSelect');
+                const tds = document.getElementById('tripDriver');
+                
+                if(gds) {
+                    const current = gds.value;
+                    gds.innerHTML = '<option value="">All Drivers</option>' + drivers.map(d => `<option>${d}</option>`).join("");
+                    gds.value = current;
+                }
+                if(tds) {
+                    const current = tds.value;
+                    tds.innerHTML = '<option value="">Select Driver...</option>' + drivers.map(d => `<option>${d}</option>`).join("");
+                    tds.value = current;
+                }
+            }
+        });
     }
 
     // resetAllData function removed 
@@ -731,7 +747,8 @@
             if (lastSection) switchSection(lastSection);
 
             // Background load clients (non-blocking for UI)
-            loadClients().catch(err => console.error("Client loading failed", err));
+            loadClients();
+            loadStaff();
 
             // Cross-tab sync via localStorage events
             window.addEventListener('storage', (e) => {

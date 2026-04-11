@@ -530,11 +530,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
 
 /* --- CONFIG --- */
 const SHOPS = ["Nettor", "Kannankulangara", "Vadakkekotta"];
-const STAFF = {
-  Nettor: ["Geethu", "Sedhu", "Hathika", "Roshna", "Rincy"],
-  Kannankulangara: ["Sreedevi", "Rejitha", "Suma"],
-  Vadakkekotta: ["Remya"]
-};
+let STAFF = { Nettor:[], Kannankulangara:[], Vadakkekotta:[] };
 const DB_KEY = "IYERSFOOD_ERP_V3_3"; 
 const CLIENT_DB_KEY = "IYERS_CLIENT_DB_V2";
 const empty = `<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;font-size:12px;">No records for this selection</td></tr>`;
@@ -631,9 +627,38 @@ function initApp() {
     }
     
     loadClients();
+    loadStaff();
     initStaffGrid();
     setCategory(currentCategory);
     switchSection('production'); 
+}
+
+function loadStaff() {
+    onSnapshot(doc(db, "data", "staff"), (snapshot) => {
+        if(snapshot.exists()) {
+            const list = snapshot.data().list || [];
+            // Group by role
+            let newProd = { Nettor:[], Kannankulangara:[], Vadakkekotta:[] };
+            let newDrivers = [];
+            
+            list.forEach(s => {
+                if(s.type === 'PRODUCTION') {
+                    if(s.shop === 'Common') {
+                        SHOPS.forEach(sh => newProd[sh].push(s.name));
+                    } else if(newProd[s.shop]) {
+                        newProd[s.shop].push(s.name);
+                    }
+                } else if(s.type === 'DELIVERY') {
+                    newDrivers.push(s.name);
+                }
+            });
+            
+            STAFF = newProd;
+            window.DRIVERS = newDrivers.sort();
+            syncShopUI();
+            syncDecUI();
+        }
+    });
 }
 
 // Module scripts are deferred, so DOM is guaranteed to be ready here
@@ -866,9 +891,29 @@ function setProductContext(prod) {
 
 function syncShopUI() {
     const shop = activeShop.value;
-    activeStaff.innerHTML = ""; delProdStaff.innerHTML = "";
+    activeStaff.innerHTML = ""; 
+    delProdStaff.innerHTML = "";
+    delStaff.innerHTML = "";
+    retStaff.innerHTML = '<option value="InHouse">In House (Factory)</option>';
+    
     if(shop === "ALL") { render(); return; }
-    if(STAFF[shop]) STAFF[shop].forEach(s => { activeStaff.add(new Option(s, s)); delProdStaff.add(new Option(s, s)); });
+    
+    // Populate Production Staff
+    if(STAFF[shop]) {
+        STAFF[shop].forEach(s => { 
+            activeStaff.add(new Option(s, s)); 
+            delProdStaff.add(new Option(s, s)); 
+            retStaff.add(new Option(s, s));
+        });
+    }
+    
+    // Populate Drivers into Dispatch and Returns
+    if(window.DRIVERS) {
+        window.DRIVERS.forEach(d => {
+            delStaff.add(new Option(d, d));
+            retStaff.add(new Option(d, d));
+        });
+    }
     
     // Sync Returns Shop if not in ALL mode
     if(shop !== "ALL") retShop.value = shop;
