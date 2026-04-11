@@ -134,6 +134,7 @@
         <div class="nav-item" onclick="nav('prod', this)">Production Master</div>
         <div class="nav-item" onclick="nav('del', this)">Delivery Reports</div>
         <div class="nav-item" onclick="nav('client', this)">Client Register</div>
+        <div class="nav-item" onclick="nav('staff', this)">Staff Register</div>
         <div class="nav-item" onclick="nav('sales', this)">Sales Analytics</div>
     </div>
 </div>
@@ -274,13 +275,29 @@
         </div>
     </div>
 
-    <!-- DELIVERY VIEW -->
     <div id="del" class="content">
         <div class="filter-bar">
-            <strong>Delivery Report</strong>
+            <strong>Delivery Master</strong>
             <input type="date" id="delDate" onchange="loadDateData()" style="margin-left: 10px;">
+            <button class="btn btn-primary" style="margin-left:auto" onclick="openDelModal()">+ Add Trip Entry</button>
         </div>
         <div class="driver-grid" id="deliveryGrid"></div>
+        
+        <div style="margin-top:24px; font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px">Raw Trip Logs</div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Driver</th>
+                        <th>Type</th>
+                        <th style="text-align:right">Dosa (L)</th>
+                        <th style="text-align:right">Appam (L)</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="delTable"></tbody>
+            </table>
+        </div>
     </div>
 
     <!-- CLIENT VIEW -->
@@ -297,6 +314,20 @@
             <table>
                 <thead><tr><th>Name</th><th>Phone</th><th>Price (Dosa)</th><th>Price (Appam)</th><th>Action</th></tr></thead>
                 <tbody id="clientTable"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- STAFF VIEW -->
+    <div id="staff" class="content">
+        <div class="filter-bar">
+            <strong>Staff Register</strong>
+            <button class="btn btn-primary" style="margin-left:auto" onclick="openStaffModal()">+ Add New Staff</button>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>Name</th><th>Role / Type</th><th>Primary Shop</th><th>Action</th></tr></thead>
+                <tbody id="staffTable"></tbody>
             </table>
         </div>
     </div>
@@ -409,29 +440,55 @@
     </div>
 </div>
 
+<!-- STAFF MODAL -->
+<div class="modal-overlay" id="staffModal">
+    <div class="modal">
+        <h3 style="margin-top:0">Staff Details</h3>
+        <input type="hidden" id="sId">
+        <div class="form-row"><label>Staff Name</label><input type="text" id="sName" placeholder="e.g. Anand"></div>
+        <div class="form-row"><label>Type</label><select id="sType"><option value="PRODUCTION">Production Staff</option><option value="DELIVERY">Delivery / Driver</option></select></div>
+        <div class="form-row"><label>Primary Shop / Hub</label><select id="sShop"><option>Nettor</option><option>Kannankulangara</option><option>Vadakkekotta</option><option value="Common">Common / All</option></select></div>
+        <div style="display:flex; gap:10px; margin-top:20px">
+            <button class="btn btn-primary" style="flex:1" onclick="saveStaff()">Save Staff</button>
+            <button class="btn btn-danger" style="flex:1" onclick="closeStaffModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- DELIVERY MODAL -->
+<div class="modal-overlay" id="delModal">
+    <div class="modal">
+        <h3 style="margin-top:0">Delivery Entry</h3>
+        <input type="hidden" id="dId">
+        <input type="hidden" id="dTypeOrig">
+        <div class="form-row"><label>Driver</label><select id="dDriver"></select></div>
+        <div class="form-row"><label>Type</label><select id="dType"><option>PACKET</option><option>LOOSE</option></select></div>
+        <div class="form-row"><label>From Hub</label><select id="dHub"><option>Nettor</option><option>Kannankulangara</option><option>Vadakkekotta</option></select></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+            <div class="form-row"><label>Dosa (L)</label><input type="number" id="dDosa"></div>
+            <div class="form-row"><label>Appam (L)</label><input type="number" id="dAppam"></div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:20px">
+            <button class="btn btn-primary" style="flex:1" onclick="saveDelivery()">Save Trip</button>
+            <button class="btn btn-danger" style="flex:1" onclick="closeDelModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <script type="module">
 import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../firebase-config.js";
 
 // Expose functions and state to global scope
-function syncWindow() {
-    Object.assign(window, {
-        prodDB, routeDB, clientDB, currentDate,
-        nav, resetAllData, loadDateData, openProdModal, closeProdModal, saveProduction,
-        editProd, deleteProd, openClientModal, closeClientModal, saveClient, editClient,
-        deleteClient, renderClients, renderProduction, renderSales, renderDelivery,
-        updateModalStaff, refreshUI, resetTableFilters
-    });
-}
     /* --- CONSTANTS & CONFIG --- */
     const KEY_PROD = "IYERSFOOD_ERP_V3_3";
     const KEY_ROUTE = "IYERS_ROUTE_V3_1";
-    const KEY_CLIENTS = "IYERS_CLIENT_DB_V2"; // Version 2 for Object Structure
+    const KEY_CLIENTS = "IYERS_CLIENT_DB_V2";
 
-    const STAFF_LIST = {
-        Nettor: ["Geethu", "Sedhu", "Hathika", "Roshna", "Rincy"],
-        Kannankulangara: ["Sreedevi", "Rejitha", "Suma"],
-        Vadakkekotta: ["Remya"]
-    };
+    let staffDB = []; // Array of Objects: { name, type, shop }
+    let prodDB = {};
+    let routeDB = {};
+    let clientDB = []; // Array of Objects: { name, phone, pd, pa }
+    let currentDate = new Date().toISOString().split('T')[0];
 
     const INITIAL_CLIENTS = [
         "Prime Super Market", "Krishna Stores", "Prasanth", "Velayudhan", "St. Marys", "Browns Bakery",
@@ -452,11 +509,6 @@ function syncWindow() {
         "Pottayil Stores", "SP Stores", "Sini", "Darshana", "Aruveli", "Papilon", "Hairiseed", "Anjaneya",
         "Hishighness", "AV Mart", "SB"
     ];
-
-    let prodDB = {};
-    let routeDB = {};
-    let clientDB = []; // Array of Objects: { name, phone, pd, pa }
-    let currentDate = new Date().toISOString().split('T')[0];
 
     function resetAllData() {
         if (confirm("⚠️ CAUTION: FULL SYSTEM RESET?\n\nThis will permanently delete ALL PRODUCTION AND DELIVERY LOGS from the entire history.\n\nNOTE: YOUR CLIENT REGISTER (1000+ SHOPS) WILL BE PRESERVED.\n\nAre you sure you want to proceed?")) {
@@ -491,6 +543,19 @@ function syncWindow() {
         el.classList.add('active');
         document.getElementById('pageTitle').innerText = el.innerText;
     }
+
+    // Expose functions and state to global scope
+    function syncWindow() {
+        Object.assign(window, {
+            prodDB, routeDB, clientDB, currentDate,
+            nav, resetAllData, loadDateData, openProdModal, closeProdModal, saveProduction,
+            editProd, deleteProd, openClientModal, closeClientModal, saveClient, editClient,
+            deleteClient, renderClients, renderProduction, renderSales, renderDelivery,
+            updateModalStaff, refreshUI, resetTableFilters, saveStaff, openStaffModal, closeStaffModal, editStaff, deleteStaff, saveDelivery, openDelModal, closeDelModal, editDel, deleteDel
+        });
+    }
+    syncWindow();
+
 
     /* --- DATA LAYER --- */
     function loadDateData() {
@@ -530,8 +595,42 @@ function syncWindow() {
         });
         
         loadClients();
+        loadStaff();
     }
     
+    function loadStaff() {
+        onSnapshot(doc(db, "data", "staff"), (snapshot) => {
+            if(snapshot.exists()) {
+                staffDB = snapshot.data().list || [];
+            } else {
+                // Initial fallback
+                staffDB = [
+                    { name: "Geethu", type: "PRODUCTION", shop: "Nettor" },
+                    { name: "Sedhu", type: "PRODUCTION", shop: "Nettor" },
+                    { name: "Hathika", type: "PRODUCTION", shop: "Nettor" },
+                    { name: "Roshna", type: "PRODUCTION", shop: "Nettor" },
+                    { name: "Rincy", type: "PRODUCTION", shop: "Nettor" },
+                    { name: "Sreedevi", type: "PRODUCTION", shop: "Kannankulangara" },
+                    { name: "Rejitha", type: "PRODUCTION", shop: "Kannankulangara" },
+                    { name: "Suma", type: "PRODUCTION", shop: "Kannankulangara" },
+                    { name: "Remya", type: "PRODUCTION", shop: "Vadakkekotta" },
+                    { name: "Anand", type: "DELIVERY", shop: "Common" },
+                    { name: "Renjith", type: "DELIVERY", shop: "Common" },
+                    { name: "Aswin", type: "DELIVERY", shop: "Common" },
+                    { name: "Sanja", type: "DELIVERY", shop: "Common" }
+                ];
+                saveStaffs();
+            }
+            syncWindow();
+            refreshUI();
+        });
+    }
+
+    function saveStaffs() {
+        setDoc(doc(db, "data", "staff"), { list: staffDB })
+            .catch(err => console.error("Staff sync failed", err));
+    }
+
     function loadClients() {
         onSnapshot(doc(db, "data", "clients"), (snapshot) => {
             if(snapshot.exists()) {
@@ -553,6 +652,7 @@ function syncWindow() {
         renderProduction();
         renderDelivery();
         renderClients();
+        renderStaff();
         renderSales();
     }
 
@@ -637,6 +737,64 @@ function syncWindow() {
         if(!confirm("Remove this client?")) return;
         clientDB.splice(idx, 1);
         saveClients();
+    }
+
+    /* --- STAFF REGISTER LOGIC --- */
+    function renderStaff() {
+        const tbody = document.getElementById('staffTable');
+        if(!tbody) return;
+        tbody.innerHTML = "";
+        
+        staffDB.sort((a,b) => a.name.localeCompare(b.name)).forEach((s, idx) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="font-weight:700">${s.name}</td>
+                <td><span class="badge ${s.type==='PRODUCTION'?'bg-blue':'bg-green'}">${s.type}</span></td>
+                <td>${s.shop}</td>
+                <td>
+                    <button class="btn" style="color:var(--primary); padding:4px 8px" onclick="editStaff(${idx})">Edit</button>
+                    <button class="btn" style="color:var(--danger); padding:4px 8px" onclick="deleteStaff(${idx})">Del</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+        updateModalStaff(); // Keep modal selects in sync
+    }
+
+    function openStaffModal() { document.getElementById('staffModal').style.display = "flex"; }
+    function closeStaffModal() { document.getElementById('staffModal').style.display = "none"; }
+
+    function editStaff(idx) {
+        const s = staffDB[idx];
+        document.getElementById('sId').value = idx;
+        document.getElementById('sName').value = s.name;
+        document.getElementById('sType').value = s.type;
+        document.getElementById('sShop').value = s.shop;
+        openStaffModal();
+    }
+
+    function saveStaff() {
+        const idx = document.getElementById('sId').value;
+        const name = document.getElementById('sName').value.trim();
+        const type = document.getElementById('sType').value;
+        const shop = document.getElementById('sShop').value;
+
+        if(!name) return alert("Name required");
+
+        const newObj = { name, type, shop };
+        if(idx !== "") staffDB[idx] = newObj;
+        else staffDB.push(newObj);
+        
+        saveStaffs();
+        closeStaffModal();
+        document.getElementById('sId').value = "";
+        document.getElementById('sName').value = "";
+    }
+
+    function deleteStaff(idx) {
+        if(!confirm("Remove this staff?")) return;
+        staffDB.splice(idx, 1);
+        saveStaffs();
     }
 
 
@@ -874,10 +1032,22 @@ function syncWindow() {
     function closeProdModal() { document.getElementById('prodModal').style.display = "none"; }
 
     function updateModalStaff() {
-        const s = document.getElementById('pShop').value;
+        const shop = document.getElementById('pShop')?.value;
         const sel = document.getElementById('pStaff');
-        sel.innerHTML = "";
-        if(STAFF_LIST[s]) STAFF_LIST[s].forEach(name => sel.add(new Option(name, name)));
+        const driverSel = document.getElementById('dDriver');
+
+        if(sel) {
+            sel.innerHTML = "";
+            const filtered = staffDB.filter(x => x.type === 'PRODUCTION' && (x.shop === shop || x.shop === 'Common'));
+            filtered.forEach(s => sel.add(new Option(s.name, s.name)));
+        }
+
+        if(driverSel) {
+            const currentDr = driverSel.value;
+            driverSel.innerHTML = "";
+            staffDB.filter(x => x.type === 'DELIVERY').forEach(s => driverSel.add(new Option(s.name, s.name)));
+            if(currentDr) driverSel.value = currentDr;
+        }
     }
 
     function editProd(id) {
@@ -936,7 +1106,6 @@ function syncWindow() {
         setDoc(doc(db, "data", "erp"), prodDB);
     }
 
-    /* --- DELIVERY REPORT LOGIC --- */
     function renderDelivery() {
         const grid = document.getElementById('deliveryGrid');
         if(!grid) return;
@@ -986,6 +1155,95 @@ function syncWindow() {
                 </div>
             </div>`;
         });
+
+        // Render Raw Trips Table
+        const delTable = document.getElementById('delTable');
+        if(delTable) {
+            delTable.innerHTML = "";
+            ['PACKET','LOOSE'].forEach(cat => {
+                if(rDay[cat] && rDay[cat].trips) {
+                    rDay[cat].trips.forEach((t, tidx) => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><span style="font-weight:700">${t.driver}</span> <small>(${t.hub || '?'})</small></td>
+                            <td><span class="badge ${cat==='PACKET'?'bg-blue':'bg-orange'}">${cat}</span></td>
+                            <td style="text-align:right">${t.dosa || 0}</td>
+                            <td style="text-align:right">${t.appam || 0}</td>
+                            <td>
+                                <button class="btn" style="color:var(--primary); padding:4px 8px" onclick="editDel('${cat}', ${tidx})">Edit</button>
+                                <button class="btn" style="color:var(--danger); padding:4px 8px" onclick="deleteDel('${cat}', ${tidx})">Del</button>
+                            </td>
+                        `;
+                        delTable.appendChild(tr);
+                    });
+                }
+            });
+        }
+    }
+
+    /* --- DELIVERY CRUD LOGIC --- */
+    function openDelModal() {
+        document.getElementById('delModal').style.display = "flex";
+        document.getElementById('dId').value = "";
+        document.getElementById('dDosa').value = "";
+        document.getElementById('dAppam').value = "";
+        updateModalStaff();
+    }
+    function closeDelModal() { document.getElementById('delModal').style.display = "none"; }
+
+    function editDel(cat, idx) {
+        const t = routeDB[currentDate][cat].trips[idx];
+        if(!t) return;
+        openDelModal();
+        document.getElementById('dId').value = idx;
+        document.getElementById('dTypeOrig').value = cat;
+        document.getElementById('dDriver').value = t.driver;
+        document.getElementById('dType').value = cat;
+        document.getElementById('dHub').value = t.hub || "Nettor";
+        document.getElementById('dDosa').value = t.dosa;
+        document.getElementById('dAppam').value = t.appam;
+    }
+
+    function saveDelivery() {
+        const idx = document.getElementById('dId').value;
+        const typeOrig = document.getElementById('dTypeOrig').value;
+        const driver = document.getElementById('dDriver').value;
+        const type = document.getElementById('dType').value;
+        const hub = document.getElementById('dHub').value;
+        const dosa = Number(document.getElementById('dDosa').value);
+        const appam = Number(document.getElementById('dAppam').value);
+
+        if(!routeDB[currentDate]) {
+            routeDB[currentDate] = { 
+                PACKET: { trips: [], returns: [], shops: {} }, 
+                LOOSE: { trips: [], returns: [], shops: {} } 
+            };
+        }
+        if(!routeDB[currentDate][type]) routeDB[currentDate][type] = { trips:[], returns:[], shops:{} };
+
+        const tripObj = { driver, hub, dosa, appam };
+
+        if(idx !== "") {
+            // If type changed, remove from old, push to new
+            if(type !== typeOrig) {
+                routeDB[currentDate][typeOrig].trips.splice(idx, 1);
+                routeDB[currentDate][type].trips.push(tripObj);
+            } else {
+                routeDB[currentDate][type].trips[idx] = tripObj;
+            }
+        } else {
+            routeDB[currentDate][type].trips.push(tripObj);
+        }
+
+        setDoc(doc(db, "data", "route"), routeDB)
+            .then(() => closeDelModal())
+            .catch(err => alert("Error saving delivery: " + err.message));
+    }
+
+    function deleteDel(cat, idx) {
+        if(!confirm("Delete this trip?")) return;
+        routeDB[currentDate][cat].trips.splice(idx, 1);
+        setDoc(doc(db, "data", "route"), routeDB);
     }
 
     function generateShopSalesHTML(rDay, driverName) {
