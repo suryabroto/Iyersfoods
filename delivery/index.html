@@ -295,7 +295,7 @@
                     <option value="">All Drivers</option>
                  </select>
             
-                 <div class="date-pill">
+                 <div class="date-pill" onclick="openDatePicker()">
                     <span id="dateDisplay">Loading...</span>
                     <span>📅</span>
                     <input type="date" id="workDate">
@@ -586,6 +586,17 @@
             const now = Date.now();
             const recentlyTyped = (now - lastSaveTime) < 2000;
 
+            // CRITICAL FIX: Guard BEFORE overwriting globalDB/currentData.
+            // Overwriting currentData with a stale Firestore snapshot while the user is
+            // typing was the root cause of Today's Sale resetting to ₹0 on credit entry.
+            if (isLocal || recentlyTyped) {
+                console.log("Sync skipped (Active Typing)");
+                // Still persist to localStorage for cross-tab awareness, but
+                // do NOT overwrite the live in-memory globalDB / currentData.
+                if (snap.exists) localStorage.setItem(DB_KEY, JSON.stringify(snap.data()));
+                return;
+            }
+
             if (snap.exists) {
                 const remoteAllData = snap.data();
                 // Update the entire local cache with the remote data object
@@ -610,12 +621,6 @@
                     };
                 }
                 currentData = globalDB[date][currentCategory];
-            }
-
-            // IF THE USER IS TYPING: Skip the heavy UI re-render (avoids cursor jumps/digit reversal)
-            if (isLocal || recentlyTyped) {
-                console.log("Sync skipped (Active Typing)");
-                return; 
             }
 
             pastDuesCache = {};
@@ -704,10 +709,12 @@
         console.log("IyersRoute V3.1 Initializing...");
         
         try {
-            // Priority 1: Set Date & Load Cache immediately for UI feedback
+            // Priority 1: Always start on TODAY's date on every page load/refresh.
+            // The user can navigate to other dates using the calendar, but refresh
+            // always snaps back to the current working day.
             const today = new Date().toISOString().split('T')[0];
-            const lastDate = localStorage.getItem('IYERS_LAST_DATE') || today;
-            selectedDate = lastDate; // Set temporarily for initShopData
+            const lastDate = today; // FIX: always today on refresh
+            selectedDate = lastDate;
             
             // Priority 2: Initialize basic structure so buttons don't crash
             if (!globalDB[selectedDate]) {
@@ -722,10 +729,10 @@
             await loadDate(lastDate);
 
             // Restore other selections
-            const lastHub = localStorage.getItem('IYERS_LAST_HUB');
-            const lastDriver = localStorage.getItem('IYERS_LAST_DRIVER');
+            const lastHub      = localStorage.getItem('IYERS_LAST_HUB');
+            const lastDriver   = localStorage.getItem('IYERS_LAST_DRIVER');
             const lastCategory = localStorage.getItem('IYERS_LAST_CATEGORY');
-            const lastSection = localStorage.getItem('IYERS_LAST_SECTION');
+            const lastSection  = localStorage.getItem('IYERS_LAST_SECTION');
 
             const workDateInput = document.getElementById('workDate');
             if (workDateInput) {
@@ -772,7 +779,7 @@
             console.error("Initialization failed:", err);
             // Even if everything fails, try to show the date
             const today = new Date().toISOString().split('T')[0];
-            loadDate(localStorage.getItem('IYERS_LAST_DATE') || today).catch(e => {});
+            loadDate(today).catch(e => {});
         }
     };
 
@@ -781,6 +788,18 @@
         const overlay = document.querySelector('.sidebar-overlay');
         if (sb) sb.classList.toggle('open');
         if (overlay) overlay.classList.toggle('show');
+    }
+
+    // Opens the native date picker immediately when the calendar pill is tapped.
+    // Uses the modern showPicker() API; falls back to .click() on older browsers.
+    function openDatePicker() {
+        const input = document.getElementById('workDate');
+        if (!input) return;
+        try {
+            input.showPicker();
+        } catch (e) {
+            input.click();
+        }
     }
 
     function switchSection(sectionId) {
@@ -906,9 +925,9 @@
                     const s = data.shops[shopName];
                     const pD = getPrice(shopName, 'dosa');
                     const pA = getPrice(shopName, 'appam');
-                    totalValueSent += ((Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0)) * pD +
-                                      ((Number(s.appam.sale)||0) + (Number(s.appam.cr)||0)) * pA;
-                    totalCashPaid += Number(s.cashReceived) || 0;
+                    totalValueSent += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * pD +
+                                      ((Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0)) * pA;
+                    totalCashPaid += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
                 }
             });
         }
@@ -927,9 +946,9 @@
                 const data = dayDataObj[cat];
                 if (data && data.shops && data.shops[shopName]) {
                     const s = data.shops[shopName];
-                    dateDosa  += (Number(s.dosa.sale)||0)  + (Number(s.dosa.cr)||0);
-                    dateAppam += (Number(s.appam.sale)||0) + (Number(s.appam.cr)||0);
-                    dateCash  += Number(s.cashReceived) || 0;
+                    dateDosa  += (Number(s.dosa?.sale)||0)  + (Number(s.dosa?.cr)||0);
+                    dateAppam += (Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0);
+                    dateCash  += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
                     hasDateActivity = true;
                 }
             });
@@ -1098,27 +1117,43 @@
     
     function updateShopBalance(shop, idx) {
         const prevDues = getPendingBalance(shop, selectedDate);
-        let todaySale = 0;
+        let todaySaleOnly = 0;  // Sale amount only (no credit)
         let cashRec = 0;
         let gpayRec = 0;
 
-        // Sum data from ALL categories for this shop
+        const pD = getPrice(shop, 'dosa');
+        const pA = getPrice(shop, 'appam');
+
+        // ALWAYS read the ACTIVE category from the live in-memory currentData.
+        // This prevents a stale Firestore snapshot from zeroing Today's Sale
+        // the moment a credit/dmg/free field is changed.
+        const sLocal = currentData.shops[shop];
+        if (sLocal) {
+            todaySaleOnly += (Number(sLocal.dosa?.sale) || 0) * pD +
+                             (Number(sLocal.appam?.sale) || 0) * pA;
+            cashRec  += Number(sLocal.cashReceived)  || 0;
+            gpayRec  += Number(sLocal.gpayReceived)  || 0;
+        }
+
+        // For OTHER categories (e.g. LOOSE when currentCategory is PACKET) use globalDB
         const dayData = globalDB[selectedDate];
         if (dayData) {
             Object.keys(dayData).forEach(cat => {
-                const s = dayData[cat].shops[shop];
-                if (s) {
-                    const pD = getPrice(shop, 'dosa');
-                    const pA = getPrice(shop, 'appam');
-                    todaySale += (Number(s.dosa.sale) || 0) * pD +
-                                 (Number(s.appam.sale) || 0) * pA;
-                    cashRec += Number(s.cashReceived) || 0;
-                    gpayRec += Number(s.gpayReceived) || 0;
-                }
+                if (cat === currentCategory) return; // Already handled above
+                const catObj = dayData[cat];
+                if (!catObj || !catObj.shops) return;
+                const s = catObj.shops[shop];
+                if (!s) return;
+                todaySaleOnly += (Number(s.dosa?.sale) || 0) * pD +
+                                 (Number(s.appam?.sale) || 0) * pA;
+                cashRec  += Number(s.cashReceived)  || 0;
+                gpayRec  += Number(s.gpayReceived)  || 0;
             });
         }
 
-        const totalTarget = prevDues + todaySale;
+        // Closing Balance = Previous Dues + Today's Sale (sale only) - Payments
+        // Credit is NOT included here — it's tracked in Overview & Tally only
+        const totalTarget = prevDues + todaySaleOnly;
         const balance = totalTarget - cashRec - gpayRec;
         
         const balEl = document.getElementById(`balance-${idx}`);
@@ -1129,14 +1164,14 @@
         if(balEl) {
             balEl.innerText = `₹${balance}`;
             if(balance > 0) {
-                balEl.style.color = '#ef4444'; // Red - pending
+                balEl.style.color = '#ef4444';
             } else if(balance < 0) {
-                balEl.style.color = '#f59e0b'; // Orange - overpaid
+                balEl.style.color = '#f59e0b';
             } else {
-                balEl.style.color = '#10b981'; // Green - settled
+                balEl.style.color = '#10b981';
             }
         }
-        if(totEl) totEl.innerText = `₹${todaySale}`;
+        if(totEl) totEl.innerText = `₹${todaySaleOnly}`;
     }
     // Updates only the header and class of the shop card (lightweight)
     function updateShopRowUI(shop) {
@@ -1149,16 +1184,17 @@
         let shopDriver = null;
 
         Object.keys(dayData).forEach(cat => {
-            const s = dayData[cat].shops[shop];
-            if(s) {
-                const pD = getPrice(shop, 'dosa');
-                const pA = getPrice(shop, 'appam');
-                totalValToday += (Number(s.dosa.sale)||0) * pD + 
-                                 (Number(s.appam.sale)||0) * pA;
-                totalCashToday += Number(s.cashReceived) || 0;
-                if(s.dosa.sale || s.dosa.cr || s.appam.sale || s.appam.cr || s.cashReceived) hasActivity = true;
-                if(s.driver) shopDriver = s.driver;
-            }
+            const catObj = dayData[cat];
+            if (!catObj || !catObj.shops) return;
+            const s = catObj.shops[shop];
+            if(!s) return;
+            const pD = getPrice(shop, 'dosa');
+            const pA = getPrice(shop, 'appam');
+            totalValToday += (Number(s.dosa?.sale)||0) * pD + 
+                             (Number(s.appam?.sale)||0) * pA;
+            totalCashToday += Number(s.cashReceived) || 0;
+            if(s.dosa?.sale || s.dosa?.cr || s.appam?.sale || s.appam?.cr || s.cashReceived) hasActivity = true;
+            if(s.driver) shopDriver = s.driver;
         });
         
         const card = document.getElementById(`card-shop-${idx}`);
@@ -1262,17 +1298,16 @@
 
             cats.forEach(cat => {
                 const cObj = dayData[cat];
-                if(cObj && cObj.shops && cObj.shops[shop]) {
-                    const sd = cObj.shops[shop];
-                    const pD = getPrice(shop, 'dosa');
-                    const pA = getPrice(shop, 'appam');
-                    
-                    todaySaleVal += ((Number(sd.dosa.sale)||0) + (Number(sd.dosa.cr)||0)) * pD + 
-                                  ((Number(sd.appam.sale)||0) + (Number(sd.appam.cr)||0)) * pA;
-                    todayCash += Number(sd.cashReceived) || 0;
-                    todayCreditOnly += (Number(sd.dosa.cr)||0) * pD + (Number(sd.appam.cr)||0) * pA;
-                    if(sd.driver) currentDriverName = sd.driver;
-                }
+                if(!cObj || !cObj.shops || !cObj.shops[shop]) return;
+                const sd = cObj.shops[shop];
+                const pD = getPrice(shop, 'dosa');
+                const pA = getPrice(shop, 'appam');
+                
+                todaySaleVal += ((Number(sd.dosa?.sale)||0) + (Number(sd.dosa?.cr)||0)) * pD + 
+                              ((Number(sd.appam?.sale)||0) + (Number(sd.appam?.cr)||0)) * pA;
+                todayCash += Number(sd.cashReceived) || 0;
+                todayCreditOnly += (Number(sd.dosa?.cr)||0) * pD + (Number(sd.appam?.cr)||0) * pA;
+                if(sd.driver) currentDriverName = sd.driver;
             });
 
             const totalOutstanding = pastDues + todaySaleVal - todayCash;
@@ -1421,17 +1456,19 @@
              const dayData = globalDB[selectedDate] || {};
 
              Object.keys(dayData).forEach(cat => {
-                const catShops = dayData[cat].shops || {};
+                const catObj = dayData[cat];
+                if (!catObj || !catObj.shops) return;
+                const catShops = catObj.shops;
                 Object.keys(catShops).forEach(shop => {
                     const sd = catShops[shop];
                     if(!sd || sd.driver !== driver) return;
                     
-                    const hasShopActivity = (sd.dosa.sale || sd.dosa.cr || sd.appam.sale || sd.appam.cr || sd.cashReceived);
+                    const hasShopActivity = (sd.dosa?.sale || sd.dosa?.cr || sd.appam?.sale || sd.appam?.cr || sd.cashReceived);
                     if(!hasShopActivity) return;
 
                     if(!shopActivity[shop]) shopActivity[shop] = { dosa:0, appam:0, cash:0 };
-                    shopActivity[shop].dosa += (Number(sd.dosa.sale)||0) + (Number(sd.dosa.cr)||0);
-                    shopActivity[shop].appam += (Number(sd.appam.sale)||0) + (Number(sd.appam.cr)||0);
+                    shopActivity[shop].dosa += (Number(sd.dosa?.sale)||0) + (Number(sd.dosa?.cr)||0);
+                    shopActivity[shop].appam += (Number(sd.appam?.sale)||0) + (Number(sd.appam?.cr)||0);
                     shopActivity[shop].cash += (Number(sd.cashReceived)||0);
                 });
              });
@@ -1569,10 +1606,12 @@
             let totalValToday = 0;
             const dayData = globalDB[selectedDate] || {};
             Object.keys(dayData).forEach(cat => {
-                const s = dayData[cat].shops[shop];
+                const catObj = dayData[cat];
+                if (!catObj || !catObj.shops) return;
+                const s = catObj.shops[shop];
                 if(s) {
-                    totalValToday += (Number(s.dosa.sale)||0) * pD + 
-                                     (Number(s.appam.sale)||0) * pA;
+                    totalValToday += (Number(s.dosa?.sale)||0) * pD + 
+                                     (Number(s.appam?.sale)||0) * pA;
                 }
             });
             
@@ -1836,15 +1875,15 @@
                 const s = shops[shop];
                 if(!s || (filterDriver && s.driver !== filterDriver)) return;
 
-                const dSale = Number(s.dosa.sale)||0;
-                const dCr = Number(s.dosa.cr)||0;
-                const dDmg = Number(s.dosa.dmg)||0;
-                const dFree = Number(s.dosa.free)||0;
+                const dSale = Number(s.dosa?.sale)||0;
+                const dCr = Number(s.dosa?.cr)||0;
+                const dDmg = Number(s.dosa?.dmg)||0;
+                const dFree = Number(s.dosa?.free)||0;
                 
-                const aSale = Number(s.appam.sale)||0;
-                const aCr = Number(s.appam.cr)||0;
-                const aDmg = Number(s.appam.dmg)||0;
-                const aFree = Number(s.appam.free)||0;
+                const aSale = Number(s.appam?.sale)||0;
+                const aCr = Number(s.appam?.cr)||0;
+                const aDmg = Number(s.appam?.dmg)||0;
+                const aFree = Number(s.appam?.free)||0;
 
                 const pD = getPrice(shop, 'dosa');
                 const pA = getPrice(shop, 'appam');
@@ -1892,20 +1931,20 @@
             Object.keys(dayData).forEach(cat => {
                 // If in category-specific mode (Loose), only look at Loose data for this shop
                 if(currentCategory !== 'PACKET' && cat !== currentCategory) return;
-
-                const s = dayData[cat].shops[shop];
-                if (s) {
-                    const pD = getPrice(shop, 'dosa');
-                    const pA = getPrice(shop, 'appam');
-                    todaySaleVal += ((Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0)) * pD + 
-                                   ((Number(s.appam.sale)||0) + (Number(s.appam.cr)||0)) * pA;
-                    shopCashRec += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
-                    if (cat === currentCategory) {
-                        dCrTotal += (Number(s.dosa.cr)||0);
-                        aCrTotal += (Number(s.appam.cr)||0);
-                    }
-                    if (s.driver) currentShopDriver = s.driver;
+                const catObj = dayData[cat];
+                if (!catObj || !catObj.shops) return;
+                const s = catObj.shops[shop];
+                if (!s) return;
+                const pD = getPrice(shop, 'dosa');
+                const pA = getPrice(shop, 'appam');
+                todaySaleVal += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * pD + 
+                               ((Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0)) * pA;
+                shopCashRec += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
+                if (cat === currentCategory) {
+                    dCrTotal += (Number(s.dosa?.cr)||0);
+                    aCrTotal += (Number(s.appam?.cr)||0);
                 }
+                if (s.driver) currentShopDriver = s.driver;
             });
             
             const ownerDriver = currentShopDriver || getLastDriver(shop, selectedDate);
@@ -1917,9 +1956,9 @@
             }
         });
 
-        // 5. Calculate Final Tally Fields (DAMAGE removed from deduction logic)
-        const dOut = stats.dosa.sold + stats.dosa.credit + stats.dosa.free;
-        const aOut = stats.appam.sold + stats.appam.credit + stats.appam.free;
+        // 5. Calculate Final Tally Fields (sold + credit + free + damage = total distributed)
+        const dOut = stats.dosa.sold + stats.dosa.credit + stats.dosa.free + stats.dosa.dmg;
+        const aOut = stats.appam.sold + stats.appam.credit + stats.appam.free + stats.appam.dmg;
 
         stats.dosa.balance = stats.dosa.load - dOut;
         stats.appam.balance = stats.appam.load - aOut;
