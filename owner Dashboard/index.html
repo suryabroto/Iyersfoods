@@ -6,6 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <style>
     :root {
         --nav-bg: #0f172a;
@@ -475,8 +477,41 @@
     </div>
 </div>
 
-<script type="module">
-import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs, deleteDoc } from "../firebase-config.js";
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
+  authDomain: "iyers-c0944.firebaseapp.com",
+  projectId: "iyers-c0944",
+  storageBucket: "iyers-c0944.firebasestorage.app",
+  messagingSenderId: "234376255779",
+  appId: "1:234376255779:web:8f4b43ff3f66cfd4071496"
+};
+
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+function doc(dbRef, ...segments) {
+    if (segments.length < 2) throw new Error("doc() needs collection and document id");
+    let ref = dbRef.collection(segments[0]).doc(segments[1]);
+    for (let i = 2; i < segments.length; i += 2) {
+        ref = ref.collection(segments[i]).doc(segments[i + 1]);
+    }
+    return ref;
+}
+
+function collection(dbRef, ...segments) {
+    let ref = dbRef.collection(segments[0]);
+    for (let i = 1; i < segments.length; i += 2) {
+        ref = ref.doc(segments[i]).collection(segments[i + 1]);
+    }
+    return ref;
+}
+
+function setDoc(ref, data) { return ref.set(data); }
+function onSnapshot(ref, next, error) { return ref.onSnapshot(next, error); }
+function getDoc(ref) { return ref.get(); }
+function getDocs(ref) { return ref.get(); }
+function deleteDoc(ref) { return ref.delete(); }
 
 // Expose functions and state to global scope
     /* --- CONSTANTS & CONFIG --- */
@@ -660,7 +695,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs, deleteDoc } f
     function loadData() {
         // Real-time Production logs
         onSnapshot(doc(db, "data", "erp"), (snapshot) => {
-            if(snapshot.exists()) prodDB = snapshot.data();
+            if(snapshot.exists) prodDB = snapshot.data();
             syncWindow();
             refreshUI();
         });
@@ -679,7 +714,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs, deleteDoc } f
         // Legacy route fallback for older history not yet migrated
         onSnapshot(doc(db, "data", "route"), (snapshot) => {
             legacyRouteDB = {};
-            if(snapshot.exists()) {
+            if(snapshot.exists) {
                 const raw = snapshot.data() || {};
                 Object.keys(raw).forEach((dateKey) => {
                     if (!routeDaysDB[dateKey]) legacyRouteDB[dateKey] = normalizeRouteDay(raw[dateKey]);
@@ -696,7 +731,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs, deleteDoc } f
     
     function loadStaff() {
         onSnapshot(doc(db, "data", "staff"), (snapshot) => {
-            if(snapshot.exists()) {
+            if(snapshot.exists) {
                 staffDB = snapshot.data().list || [];
             } else {
                 // Initial fallback
@@ -729,7 +764,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs, deleteDoc } f
 
     function loadClients() {
         onSnapshot(doc(db, "data", "clients"), (snapshot) => {
-            if(snapshot.exists()) {
+            if(snapshot.exists) {
                 clientDB = snapshot.data().list || [];
                 syncWindow();
                 refreshUI();
