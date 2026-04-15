@@ -533,6 +533,74 @@
     let lastSaveTime = 0; // Throttles full re-renders during active typing
     window.editState = { trip: null };
 
+    function getEmptyRouteCategory() {
+        return {
+            trips: [],
+            returns: [],
+            shops: {},
+            tally: { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] },
+            activeShops: []
+        };
+    }
+
+    function getEmptyRouteDay() {
+        return {
+            PACKET: getEmptyRouteCategory(),
+            LOOSE: getEmptyRouteCategory()
+        };
+    }
+
+    function isSingleCategoryRoutePayload(dayData) {
+        if (!dayData || typeof dayData !== 'object') return false;
+        return Array.isArray(dayData.trips) || Array.isArray(dayData.returns) || !!dayData.shops || !!dayData.tally;
+    }
+
+    function normalizeRouteDay(dayData, fallbackCategory = 'PACKET') {
+        const base = getEmptyRouteDay();
+        if (!dayData || typeof dayData !== 'object') return base;
+
+        if (isSingleCategoryRoutePayload(dayData)) {
+            base[fallbackCategory] = {
+                ...base[fallbackCategory],
+                trips: Array.isArray(dayData.trips) ? dayData.trips : [],
+                returns: Array.isArray(dayData.returns) ? dayData.returns : [],
+                shops: dayData.shops || {},
+                tally: {
+                    ...base[fallbackCategory].tally,
+                    ...(dayData.tally || {}),
+                    cashInHandMap: (dayData.tally && dayData.tally.cashInHandMap) || {},
+                    denomsMap: (dayData.tally && dayData.tally.denomsMap) || {},
+                    expenses: (dayData.tally && Array.isArray(dayData.tally.expenses)) ? dayData.tally.expenses : [],
+                    extraIncome: (dayData.tally && Array.isArray(dayData.tally.extraIncome)) ? dayData.tally.extraIncome : []
+                },
+                activeShops: Array.isArray(dayData.activeShops) ? dayData.activeShops : []
+            };
+            return base;
+        }
+
+        ['PACKET', 'LOOSE'].forEach(cat => {
+            const incoming = dayData[cat] || {};
+            base[cat] = {
+                ...base[cat],
+                ...incoming,
+                trips: Array.isArray(incoming.trips) ? incoming.trips : [],
+                returns: Array.isArray(incoming.returns) ? incoming.returns : [],
+                shops: incoming.shops || {},
+                tally: {
+                    ...base[cat].tally,
+                    ...(incoming.tally || {}),
+                    cashInHandMap: (incoming.tally && incoming.tally.cashInHandMap) || {},
+                    denomsMap: (incoming.tally && incoming.tally.denomsMap) || {},
+                    expenses: (incoming.tally && Array.isArray(incoming.tally.expenses)) ? incoming.tally.expenses : [],
+                    extraIncome: (incoming.tally && Array.isArray(incoming.tally.extraIncome)) ? incoming.tally.extraIncome : []
+                },
+                activeShops: Array.isArray(incoming.activeShops) ? incoming.activeShops : []
+            };
+        });
+
+        return base;
+    }
+
     /* ---- FIRESTORE SAVE ---- */
     async function saveData() {
         lastSaveTime = Date.now();
@@ -541,13 +609,11 @@
         globalDB[selectedDate][currentCategory] = currentData;
         localStorage.setItem(DB_KEY, JSON.stringify(globalDB));
 
-        // 2. Write to Firestore (merge so both PACKET & LOOSE coexist in same doc)
+        // 2. Write the current day to its own Firestore document
         try {
-            const dateData = globalDB[selectedDate] || {};
-            // Firestore doesn't support undefined values; sanitize first
-            const sanitized = JSON.parse(JSON.stringify(dateData));
-            // FIXED: Use the shared 'data/route' document instead of separate root collection
-            await db.collection("data").doc("route").set({ [selectedDate]: sanitized }, { merge: true });
+            const routeRef = db.collection("routeDays").doc(selectedDate);
+            const sanitizedDay = JSON.parse(JSON.stringify(normalizeRouteDay(globalDB[selectedDate], currentCategory)));
+            await routeRef.set(sanitizedDay, { merge: true });
         } catch (err) {
             console.error("Firestore save error:", err);
         }
@@ -563,12 +629,8 @@
         if (raw) {
             try { globalDB = JSON.parse(raw); } catch(e) { globalDB = {}; }
         }
-        if (!globalDB[date]) {
-            globalDB[date] = {
-                PACKET: { trips: [], returns: [], shops: {} },
-                LOOSE:  { trips: [], returns: [], shops: {} }
-            };
-        }
+        if (!globalDB[date]) globalDB[date] = getEmptyRouteDay();
+        globalDB[date] = normalizeRouteDay(globalDB[date], currentCategory);
         currentData = globalDB[date][currentCategory];
         initShopDataForDate(date);
         pastDuesCache = {};
@@ -578,9 +640,8 @@
         });
         fullRender();
 
-        // Step 2: Set up real-time listener (Compat Style)
-        // FIXED: Listen to the shared 'data/route' document for all updates
-        unsubscribeSnapshot = db.collection("data").doc("route").onSnapshot({ includeMetadataChanges: true }, (snap) => {
+        // Step 2: Set up real-time listener on the per-day route document
+        unsubscribeSnapshot = db.collection("routeDays").doc(date).onSnapshot({ includeMetadataChanges: true }, async (snap) => {
             // Priority Check: Is this a local write or are we in a typing cooldown?
             const isLocal = snap.metadata.hasPendingWrites;
             const now = Date.now();
@@ -593,34 +654,34 @@
                 console.log("Sync skipped (Active Typing)");
                 // Still persist to localStorage for cross-tab awareness, but
                 // do NOT overwrite the live in-memory globalDB / currentData.
-                if (snap.exists) localStorage.setItem(DB_KEY, JSON.stringify(snap.data()));
                 return;
             }
 
             if (snap.exists) {
-                const remoteAllData = snap.data();
-                // Update the entire local cache with the remote data object
-                globalDB = remoteAllData;
-                localStorage.setItem(DB_KEY, JSON.stringify(globalDB));
-                
-                // Ensure the requested date exists in the loaded data
-                if (!globalDB[date]) {
-                    globalDB[date] = {
-                        PACKET: { trips: [], returns: [], shops: {} },
-                        LOOSE:  { trips: [], returns: [], shops: {} }
-                    };
+                globalDB[date] = normalizeRouteDay(snap.data(), currentCategory);
+                if (isSingleCategoryRoutePayload(snap.data())) {
+                    saveData();
                 }
+                localStorage.setItem(DB_KEY, JSON.stringify(globalDB));
                 currentData = globalDB[date][currentCategory];
                 initShopDataForDate(date);
             } else {
-                // If the doc doesn't exist, use the current memory state or empty
-                if (!globalDB[date]) {
-                    globalDB[date] = {
-                        PACKET: { trips: [], returns: [], shops: {} },
-                        LOOSE:  { trips: [], returns: [], shops: {} }
-                    };
+                // Legacy fallback: read the old shared route document once for this date
+                try {
+                    const legacySnap = await db.collection("data").doc("route").get();
+                    const legacyData = legacySnap.exists ? legacySnap.data() : null;
+                    if (legacyData && legacyData[date]) {
+                        globalDB[date] = normalizeRouteDay(legacyData[date], currentCategory);
+                        localStorage.setItem(DB_KEY, JSON.stringify(globalDB));
+                    } else if (!globalDB[date]) {
+                        globalDB[date] = getEmptyRouteDay();
+                    }
+                } catch (legacyErr) {
+                    console.error("Legacy route read error:", legacyErr);
+                    if (!globalDB[date]) globalDB[date] = getEmptyRouteDay();
                 }
                 currentData = globalDB[date][currentCategory];
+                initShopDataForDate(date);
             }
 
             pastDuesCache = {};
@@ -717,13 +778,9 @@
             selectedDate = lastDate;
             
             // Priority 2: Initialize basic structure so buttons don't crash
-            if (!globalDB[selectedDate]) {
-                globalDB[selectedDate] = {
-                    PACKET: { trips: [], returns: [], shops: {}, tally: { cashInHandMap: {}, denomsMap: {}, expenses: [] } },
-                    LOOSE:  { trips: [], returns: [], shops: {}, tally: { cashInHandMap: {}, denomsMap: {}, expenses: [] } }
-                };
-            }
-            currentData = globalDB[selectedDate][currentCategory] || { trips: [], returns: [], shops: {} };
+            if (!globalDB[selectedDate]) globalDB[selectedDate] = getEmptyRouteDay();
+            globalDB[selectedDate] = normalizeRouteDay(globalDB[selectedDate], currentCategory);
+            currentData = globalDB[selectedDate][currentCategory];
 
             // Start loading process
             await loadDate(lastDate);

@@ -476,7 +476,7 @@
 </div>
 
 <script type="module">
-import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../firebase-config.js";
+import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs, deleteDoc } from "../firebase-config.js";
 
 // Expose functions and state to global scope
     /* --- CONSTANTS & CONFIG --- */
@@ -487,6 +487,8 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
     let staffDB = []; // Array of Objects: { name, type, shop }
     let prodDB = {};
     let routeDB = {};
+    let routeDaysDB = {};
+    let legacyRouteDB = {};
     let clientDB = []; // Array of Objects: { name, phone, pd, pa }
     let currentDate = new Date().toISOString().split('T')[0];
 
@@ -510,12 +512,88 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
         "Hishighness", "AV Mart", "SB"
     ];
 
+    function getEmptyRouteCategory() {
+        return { trips: [], returns: [], shops: {}, tally: { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] }, activeShops: [] };
+    }
+
+    function getEmptyRouteDay() {
+        return { PACKET: getEmptyRouteCategory(), LOOSE: getEmptyRouteCategory() };
+    }
+
+    function isSingleCategoryRoutePayload(dayData) {
+        if (!dayData || typeof dayData !== "object") return false;
+        return Array.isArray(dayData.trips) || Array.isArray(dayData.returns) || !!dayData.shops || !!dayData.tally;
+    }
+
+    function normalizeRouteDay(dayData, fallbackCategory = "PACKET") {
+        const base = getEmptyRouteDay();
+        if (!dayData || typeof dayData !== "object") return base;
+
+        if (isSingleCategoryRoutePayload(dayData)) {
+            base[fallbackCategory] = {
+                ...base[fallbackCategory],
+                trips: Array.isArray(dayData.trips) ? dayData.trips : [],
+                returns: Array.isArray(dayData.returns) ? dayData.returns : [],
+                shops: dayData.shops || {},
+                tally: {
+                    ...base[fallbackCategory].tally,
+                    ...(dayData.tally || {}),
+                    cashInHandMap: (dayData.tally && dayData.tally.cashInHandMap) || {},
+                    denomsMap: (dayData.tally && dayData.tally.denomsMap) || {},
+                    expenses: (dayData.tally && Array.isArray(dayData.tally.expenses)) ? dayData.tally.expenses : [],
+                    extraIncome: (dayData.tally && Array.isArray(dayData.tally.extraIncome)) ? dayData.tally.extraIncome : []
+                },
+                activeShops: Array.isArray(dayData.activeShops) ? dayData.activeShops : []
+            };
+            return base;
+        }
+
+        ["PACKET", "LOOSE"].forEach(cat => {
+            const incoming = dayData[cat] || {};
+            base[cat] = {
+                ...base[cat],
+                ...incoming,
+                trips: Array.isArray(incoming.trips) ? incoming.trips : [],
+                returns: Array.isArray(incoming.returns) ? incoming.returns : [],
+                shops: incoming.shops || {},
+                tally: {
+                    ...base[cat].tally,
+                    ...(incoming.tally || {}),
+                    cashInHandMap: (incoming.tally && incoming.tally.cashInHandMap) || {},
+                    denomsMap: (incoming.tally && incoming.tally.denomsMap) || {},
+                    expenses: (incoming.tally && Array.isArray(incoming.tally.expenses)) ? incoming.tally.expenses : [],
+                    extraIncome: (incoming.tally && Array.isArray(incoming.tally.extraIncome)) ? incoming.tally.extraIncome : []
+                },
+                activeShops: Array.isArray(incoming.activeShops) ? incoming.activeShops : []
+            };
+        });
+
+        return base;
+    }
+
+    function syncRouteDB() {
+        routeDB = { ...legacyRouteDB, ...routeDaysDB };
+    }
+
+    function saveRouteDay(date) {
+        const payload = JSON.parse(JSON.stringify(normalizeRouteDay(routeDB[date] || getEmptyRouteDay())));
+        routeDB[date] = payload;
+        routeDaysDB[date] = payload;
+        syncRouteDB();
+        return setDoc(doc(db, "routeDays", date), payload);
+    }
+
     function resetAllData() {
         if (confirm("⚠️ CAUTION: FULL SYSTEM RESET?\n\nThis will permanently delete ALL PRODUCTION AND DELIVERY LOGS from the entire history.\n\nNOTE: YOUR CLIENT REGISTER (1000+ SHOPS) WILL BE PRESERVED.\n\nAre you sure you want to proceed?")) {
-            Promise.all([
-                setDoc(doc(db, "data", "erp"), {}),
-                setDoc(doc(db, "data", "route"), {})
-            ]).then(() => {
+            getDocs(collection(db, "routeDays")).then((snap) => {
+                const deletions = [];
+                snap.forEach((routeDoc) => deletions.push(deleteDoc(routeDoc.ref)));
+                return Promise.all([
+                    setDoc(doc(db, "data", "erp"), {}),
+                    setDoc(doc(db, "data", "route"), {}),
+                    ...deletions
+                ]);
+            }).then(() => {
                 alert("All logs have been cleared on Firestore. Client register was preserved.");
                 location.reload();
             }).catch(err => alert("Error clearing data: " + err.message));
@@ -587,9 +665,27 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
             refreshUI();
         });
         
-        // Real-time Delivery logs
+        // Real-time Delivery logs from per-day route documents
+        onSnapshot(collection(db, "routeDays"), (snapshot) => {
+            routeDaysDB = {};
+            snapshot.forEach((routeDoc) => {
+                routeDaysDB[routeDoc.id] = normalizeRouteDay(routeDoc.data());
+            });
+            syncRouteDB();
+            syncWindow();
+            refreshUI();
+        });
+
+        // Legacy route fallback for older history not yet migrated
         onSnapshot(doc(db, "data", "route"), (snapshot) => {
-            if(snapshot.exists()) routeDB = snapshot.data();
+            legacyRouteDB = {};
+            if(snapshot.exists()) {
+                const raw = snapshot.data() || {};
+                Object.keys(raw).forEach((dateKey) => {
+                    if (!routeDaysDB[dateKey]) legacyRouteDB[dateKey] = normalizeRouteDay(raw[dateKey]);
+                });
+            }
+            syncRouteDB();
             syncWindow();
             refreshUI();
         });
@@ -1214,12 +1310,10 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
         const appam = Number(document.getElementById('dAppam').value);
 
         if(!routeDB[currentDate]) {
-            routeDB[currentDate] = { 
-                PACKET: { trips: [], returns: [], shops: {} }, 
-                LOOSE: { trips: [], returns: [], shops: {} } 
-            };
+            routeDB[currentDate] = getEmptyRouteDay();
         }
-        if(!routeDB[currentDate][type]) routeDB[currentDate][type] = { trips:[], returns:[], shops:{} };
+        routeDB[currentDate] = normalizeRouteDay(routeDB[currentDate]);
+        if(!routeDB[currentDate][type]) routeDB[currentDate][type] = getEmptyRouteCategory();
 
         const tripObj = { driver, hub, dosa, appam };
 
@@ -1235,7 +1329,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
             routeDB[currentDate][type].trips.push(tripObj);
         }
 
-        setDoc(doc(db, "data", "route"), routeDB)
+        saveRouteDay(currentDate)
             .then(() => closeDelModal())
             .catch(err => alert("Error saving delivery: " + err.message));
     }
@@ -1243,7 +1337,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
     function deleteDel(cat, idx) {
         if(!confirm("Delete this trip?")) return;
         routeDB[currentDate][cat].trips.splice(idx, 1);
-        setDoc(doc(db, "data", "route"), routeDB);
+        saveRouteDay(currentDate);
     }
 
     function generateShopSalesHTML(rDay, driverName) {
