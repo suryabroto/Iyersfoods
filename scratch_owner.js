@@ -1,511 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>IyersFood | Admin Console</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
-<style>
-    :root {
-        --nav-bg: #0f172a;
-        --nav-hover: #1e293b;
-        --primary: #2563eb;
-        --bg-main: #f8fafc;
-        --border: #e2e8f0;
-        --text-dark: #0f172a;
-        --text-light: #64748b;
-        --danger: #ef4444;
-        --success: #10b981;
-    }
-    * { box-sizing: border-box; outline: none; }
-    body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-main); display: flex; height: 100vh; overflow: hidden; }
 
-    /* --- SIDEBAR --- */
-    .sidebar { width: 240px; background: var(--nav-bg); color: white; display: flex; flex-direction: column; flex-shrink: 0; }
-    .brand { height: 60px; display: flex; align-items: center; padding: 0 20px; font-weight: 700; font-size: 18px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .brand span { color: var(--primary); margin-left: 4px; }
-    .nav-list { padding: 20px 0; flex: 1; }
-    .nav-item { padding: 12px 24px; cursor: pointer; color: #94a3b8; font-size: 14px; font-weight: 500; display: flex; gap: 12px; transition: 0.2s; }
-    .nav-item:hover, .nav-item.active { background: var(--nav-hover); color: white; border-left: 3px solid var(--primary); }
-    
-    /* --- MAIN --- */
-    .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-    .topbar { height: 60px; background: white; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 24px; }
-    .page-title { font-weight: 700; font-size: 16px; color: var(--text-dark); }
-    .user { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-    .avatar { width: 32px; height: 32px; background: #e0f2fe; color: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-
-    .content { flex: 1; overflow-y: auto; padding: 24px; display:none; }
-    .content.active { display: block; }
-
-    /* --- DASHBOARD CARDS --- */
-    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 24px; }
-    .card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-    .label { font-size: 11px; text-transform: uppercase; color: var(--text-light); font-weight: 700; margin-bottom: 6px; }
-    .val { font-size: 24px; font-weight: 700; color: var(--text-dark); }
-    .sub { font-size: 12px; color: var(--text-light); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
-
-    /* --- FILTERS --- */
-    .filter-bar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; background: white; padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
-    select, input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
-    .btn { padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
-    .btn-primary { background: var(--primary); color: white; }
-    .btn-danger { background: #fee2e2; color: var(--danger); }
-    
-    /* --- TABLE --- */
-    .table-container { background: white; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
-    th { text-align: left; padding: 12px 16px; background: #f8fafc; border-bottom: 1px solid var(--border); color: var(--text-light); font-weight: 600; font-size: 11px; text-transform: uppercase; }
-    td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--text-dark); vertical-align: top; }
-    .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-    .bg-blue { background: #e0f2fe; color: #0284c7; }
-    .bg-green { background: #dcfce7; color: #16a34a; }
-    .bg-orange { background: #ffedd5; color: #c2410c; }
-
-    /* --- EDITOR MODAL --- */
-    .modal-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); display:none; justify-content:center; align-items:center; z-index:100; }
-    .modal { background: white; padding: 24px; border-radius: 12px; width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-    .form-row { margin-bottom: 12px; }
-    .form-row label { display: block; font-size: 12px; font-weight: 600; color: var(--text-light); margin-bottom: 4px; }
-    .form-row input, .form-row select { width: 100%; }
-
-    /* --- DELIVERY DETAILS --- */
-    .driver-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-    .driver-card { background: white; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;}
-    .driver-head { padding: 16px; background: #f8fafc; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
-    .d-stat { display: flex; padding: 12px; border-bottom: 1px solid var(--border); }
-    .d-stat-item { flex: 1; text-align: center; }
-    .d-stat-lbl { font-size: 10px; color: var(--text-light); text-transform: uppercase; }
-    .d-stat-val { font-size: 16px; font-weight: 700; }
-    
-    /* --- PRODUCTION ENHANCEMENTS --- */
-    .prod-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
-    .summary-card { background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-    .summary-card .lbl { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; margin-bottom: 8px; }
-    .summary-card .val { font-size: 24px; font-weight: 800; color: var(--text-dark); }
-    .summary-card.packet { border-left: 4px solid var(--primary); }
-    .summary-card.loose { border-left: 4px solid #f59e0b; }
-    
-    .staff-perf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-top: 24px; margin-bottom: 24px; }
-    .staff-card { background: white; padding: 16px; border-radius: 12px; border: 1px solid var(--border); }
-    .staff-card .name { font-weight: 700; font-size: 14px; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; display: flex; justify-content: space-between; }
-    .staff-stat { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; font-weight: 600; }
-
-    .client-list { padding: 12px; max-height: 200px; overflow-y: auto; }
-    .client-row { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px dashed var(--border); }
-
-    /* --- TABLE FILTERS --- */
-    .filter-row th { padding: 8px !important; background: #f1f5f9; border-bottom: 2px solid var(--border); }
-    .filter-row input, .filter-row select { 
-        width: 100%; padding: 6px 8px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; outline: none; background: white;
-    }
-    .filter-row input:focus, .filter-row select:focus { border-color: var(--primary); }
-
-    /* --- SALES REPORT STYLES --- */
-    .sales-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-    .sales-card { background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); transition: transform 0.2s; }
-    .sales-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-    .sales-card .lbl { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; }
-    .sales-card .val { font-size: 20px; font-weight: 800; color: var(--text-dark); margin: 8px 0; }
-    .sales-card.highlight { border-top: 4px solid var(--primary); }
-    
-    .report-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
-    .chart-container { background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); height: 350px; }
-    .driver-list-panel { background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
-    .driver-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
-    .driver-row:last-child { border-bottom: none; }
-
-    /* --- SALARY STYLES --- */
-    .salary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-top: 20px; }
-    .salary-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 16px; border-left: 4px solid var(--success); }
-    .salary-card .s-name { font-weight: 800; font-size: 14px; color: var(--text-dark); margin-bottom: 10px; display: flex; justify-content: space-between; }
-    .salary-card .s-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; font-weight: 600; color: var(--text-light); }
-    .salary-card .s-val { color: var(--text-dark); font-weight: 700; }
-    .salary-card .s-total { border-top: 1px dashed #cbd5e1; margin-top: 10px; padding-top: 8px; font-weight: 800; color: var(--success); font-size: 15px; }
-</style>
-</head>
-<body>
-
-<div class="sidebar">
-    <div class="brand">IyersFood<span>Admin</span></div>
-    <div class="nav-list">
-        <div class="nav-item active" onclick="nav('home', this)">Dashboard</div>
-        <div class="nav-item" onclick="nav('prod', this)">Production Master</div>
-        <div class="nav-item" onclick="nav('del', this)">Delivery Reports</div>
-        <div class="nav-item" onclick="nav('client', this)">Client Register</div>
-        <div class="nav-item" onclick="nav('staff', this)">Staff Register</div>
-        <div class="nav-item" onclick="nav('routeMaster', this)">Route Register</div>
-        <div class="nav-item" onclick="nav('sales', this)">Sales Analytics</div>
-    </div>
-</div>
-
-<div class="main">
-    <div class="topbar">
-        <div class="page-title" id="pageTitle">Dashboard</div>
-        <div style="display:flex; align-items:center; gap:15px">
-            <div class="user">Owner<div class="avatar">O</div></div>
-        </div>
-    </div>
-
-    <!-- HOME VIEW -->
-    <div id="home" class="content active">
-        <div class="kpi-grid">
-            <div class="card">
-                <div class="label">Total Production</div>
-                <div class="val" id="kpiProd">0 L</div>
-                <div class="sub">Across all shops today</div>
-            </div>
-            <div class="card">
-                <div class="label">Total Deliveries</div>
-                <div class="val" id="kpiDel">0 L</div>
-                <div class="sub">Dispatched via Route</div>
-            </div>
-            <div class="card">
-                <div class="label">Active Staff</div>
-                <div class="val" id="kpiStaff">-</div>
-                <div class="sub">On Production duties</div>
-            </div>
-            <div class="card">
-                <div class="label">Stock Efficiency</div>
-                <div class="val" style="color:var(--success)">Good</div>
-                <div class="sub">Based on returns</div>
-            </div>
-        </div>
-        <div class="card" style="height: 400px; padding:20px;">
-             <canvas id="chartMain"></canvas>
-        </div>
-    </div>
-
-    <!-- PRODUCTION VIEW -->
-    <div id="prod" class="content">
-        <div class="filter-bar" style="gap:15px; margin-bottom: 24px;">
-            <strong>Production Master</strong>
-            <div style="display:flex; align-items:center; background:white; border:1px solid var(--border); border-radius:6px; padding:2px 10px">
-                <span style="font-size:12px">Hub:</span>
-                <select id="prodFilterShop" onchange="renderProduction()" style="border:none; outline:none; padding:6px; width:150px; font-weight:600; background:transparent">
-                    <option value="ALL">All Hubs</option>
-                    <option value="Nettor">Nettor</option>
-                    <option value="Kannankulangara">Kannankulangara</option>
-                    <option value="Vadakkekotta">Vadakkekotta</option>
-                </select>
-            </div>
-            <input type="date" id="prodDate" onchange="loadDateData()">
-            <button class="btn btn-primary" style="margin-left:auto" onclick="openProdModal()">+ New Entry</button>
-        </div>
-
-        <!-- 1. SUMMARY CARDS -->
-        <div class="prod-summary-grid" style="grid-template-columns: repeat(4, 1fr);">
-            <div class="summary-card">
-                <div class="lbl">Total Production</div>
-                <div class="val" id="uiProdTotal">0 L</div>
-            </div>
-            <div class="summary-card packet">
-                <div class="lbl">Packet Mode</div>
-                <div class="val" id="uiProdPacket">0 L</div>
-            </div>
-            <div class="summary-card loose">
-                <div class="lbl">Loose Mode</div>
-                <div class="val" id="uiProdLoose">0 L</div>
-            </div>
-            <div class="summary-card" style="border-left:4px solid var(--success)">
-                <div class="lbl">Production Avg</div>
-                <div class="val" id="uiProdAvg">0</div>
-                <div style="font-size:10px; color:var(--text-light); margin-top:4px">Avg Packets / Batch</div>
-            </div>
-        </div>
-
-        <!-- 2. STAFF PERFORMANCE GRID -->
-        <div style="font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px">Staff Performance Summary</div>
-        <div id="staffPerfGrid" class="staff-perf-grid"></div>
-
-        <!-- 3. DETAILED BATCH LOGS -->
-        <div style="font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px">Detailed Batch Logs</div>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Batch</th>
-                        <th>Shop</th>
-                        <th>Staff</th>
-                        <th>Product</th>
-                        <th>Type</th>
-                        <th style="text-align:right">Qty</th>
-                        <th>Action</th>
-                    </tr>
-                    <tr class="filter-row">
-                        <th><input type="text" id="fBatch" oninput="renderProduction()" placeholder="Batch..."></th>
-                        <th>
-                            <select id="fShop" onchange="renderProduction()">
-                                <option value="ALL">All Hubs</option>
-                                <option>Nettor</option>
-                                <option>Kannankulangara</option>
-                                <option>Vadakkekotta</option>
-                            </select>
-                        </th>
-                        <th><select id="fStaff" onchange="renderProduction()"><option value="ALL">All Staff</option></select></th>
-                        <th>
-                            <select id="fProd" onchange="renderProduction()">
-                                <option value="ALL">All Products</option>
-                                <option>DOSA</option>
-                                <option>APPAM</option>
-                            </select>
-                        </th>
-                        <th>
-                            <select id="fType" onchange="renderProduction()">
-                                <option value="ALL">All Types</option>
-                                <option>PACKET</option>
-                                <option>LOOSE</option>
-                            </select>
-                        </th>
-                        <th></th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="prodTable"></tbody>
-            </table>
-        </div>
-
-        <!-- 4. STAFF SALARY & PERFORMANCE -->
-        <div style="margin-top:40px">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
-                <div style="font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase">Staff Salary & Performance</div>
-                <div style="font-size:11px; color:var(--success); font-weight:700">Earnings: ₹75 / Batch (after 4)</div>
-            </div>
-            <div id="staffSalaryGrid" class="salary-grid"></div>
-        </div>
-    </div>
-
-    <div id="del" class="content">
-        <div class="filter-bar">
-            <strong>Delivery Master</strong>
-            <input type="date" id="delDate" onchange="loadDateData()" style="margin-left: 10px;">
-            <button class="btn btn-primary" style="margin-left:auto" onclick="openDelModal()">+ Add Trip Entry</button>
-        </div>
-        <div class="driver-grid" id="deliveryGrid"></div>
-        
-        <div style="margin-top:24px; font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px">Raw Trip Logs</div>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Driver</th>
-                        <th>Type</th>
-                        <th style="text-align:right">Dosa (L)</th>
-                        <th style="text-align:right">Appam (L)</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody id="delTable"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- CLIENT VIEW -->
-    <div id="client" class="content">
-        <div class="filter-bar">
-            <strong>Client Register</strong>
-            <div style="margin-left:20px; flex:1; display:flex; align-items:center; background:white; border:1px solid var(--border); border-radius:8px; padding:4px 12px; max-width:400px">
-                <span>🔍</span>
-                <input type="text" id="clientSearch" oninput="renderClients()" placeholder="Search from 1000+ clients..." style="border:none; outline:none; padding:6px; width:100%; font-size:13px; font-weight:600">
-            </div>
-            <button class="btn btn-primary" style="margin-left:auto" onclick="openClientModal()">+ Add New Client</button>
-        </div>
-        <div class="table-container">
-            <table>
-                <thead><tr><th>Name</th><th>Phone</th><th>Price (Dosa)</th><th>Price (Appam)</th><th>Action</th></tr></thead>
-                <tbody id="clientTable"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- STAFF VIEW -->
-    <div id="staff" class="content">
-        <div class="filter-bar">
-            <strong>Staff Register</strong>
-            <button class="btn btn-primary" style="margin-left:auto" onclick="openStaffModal()">+ Add New Staff</button>
-        </div>
-        <div class="table-container">
-            <table>
-                <thead><tr><th>Name</th><th>Role / Type</th><th>Primary Shop</th><th>Action</th></tr></thead>
-                <tbody id="staffTable"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- ROUTE VIEW -->
-    <div id="routeMaster" class="content">
-        <div class="filter-bar">
-            <strong>Route Register</strong>
-            <button class="btn btn-primary" style="margin-left:auto" onclick="openRouteModal()">+ Add New Route</button>
-        </div>
-        <div class="table-container">
-            <table>
-                <thead><tr><th>Route Name</th><th>Action</th></tr></thead>
-                <tbody id="routeTable"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- SALES ANALYTICS VIEW -->
-    <div id="sales" class="content">
-        <div class="filter-bar" style="margin-bottom:24px">
-            <div>
-                <strong style="font-size:18px">Sales & Revenue Analytics</strong>
-                <div style="font-size:11px; color:var(--text-light); font-weight:600">Real-time Financial Intelligence (Zoho Style)</div>
-            </div>
-            <select id="salesPeriod" onchange="renderSales()" style="margin-left:auto; padding:8px 16px; border-radius:8px; border:1px solid var(--border); font-weight:700; color:var(--primary); cursor:pointer">
-                <option value="30">Past 30 Days</option>
-                <option value="365">Past 365 Days</option>
-            </select>
-        </div>
-
-        <div class="sales-grid">
-            <div class="sales-card highlight">
-                <div class="lbl">Total Revenue</div>
-                <div class="val" id="salesTotalRev">₹0</div>
-                <div style="font-size:10px; color:var(--primary); font-weight:700">GROSS SALES</div>
-            </div>
-            <div class="sales-card" style="border-top:4px solid var(--success)">
-                <div class="lbl">Cash Collected</div>
-                <div class="val" id="salesTotalCash">₹0</div>
-                <div style="font-size:10px; color:var(--success); font-weight:700">IN-HAND CASH</div>
-            </div>
-            <div class="sales-card" style="border-top:4px solid var(--danger)">
-                <div class="lbl">Total Outstanding</div>
-                <div class="val" id="salesTotalOut">₹0</div>
-                <div style="font-size:10px; color:var(--danger); font-weight:700">CLIENT BALANCE</div>
-            </div>
-            <div class="sales-card" style="border-top:4px solid #f59e0b">
-                <div class="lbl">Active Clients</div>
-                <div class="val" id="salesActiveClients">0</div>
-                <div style="font-size:10px; color:#f59e0b; font-weight:700">TRANSACTING TODAY</div>
-            </div>
-        </div>
-
-        <div class="report-layout">
-            <div class="chart-container">
-                <div style="font-size:12px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px; display:flex; align-items:center; gap:8px">
-                    <span style="width:12px; height:12px; background:var(--primary); border-radius:3px"></span>
-                    Revenue Trend (Daily)
-                </div>
-                <canvas id="salesChart"></canvas>
-            </div>
-            <div class="driver-list-panel">
-                <div style="font-size:12px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px">Route / Delivery Collections (Today)</div>
-                <div id="salesDriverList"></div>
-            </div>
-        </div>
-
-        <div style="margin-top:32px">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
-                <div style="font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase">Client Master Statement</div>
-                <div style="font-size:11px; color:var(--text-light)">Sorted by Balance Due</div>
-            </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Client Name</th>
-                            <th>Total Sales</th>
-                            <th>Total Received</th>
-                            <th style="text-align:right">Balance Due</th>
-                        </tr>
-                    </thead>
-                    <tbody id="salesClientTable"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-</div>
-
-<!-- PRODUCTION MODAL -->
-<div class="modal-overlay" id="prodModal">
-    <div class="modal">
-        <h3 style="margin-top:0">Production Entry</h3>
-        <input type="hidden" id="pId">
-        <div class="form-row"><label>Shop</label><select id="pShop"><option>Nettor</option><option>Kannankulangara</option><option>Vadakkekotta</option></select></div>
-        <div class="form-row"><label>Staff</label><select id="pStaff"></select></div> <!-- Populated dynamically -->
-        <div class="form-row"><label>Product</label><select id="pProd"><option>DOSA</option><option>APPAM</option></select></div>
-        <div class="form-row"><label>Type</label><select id="pType"><option>PACKET</option><option>LOOSE</option></select></div>
-        <div class="form-row"><label>Quantity (L)</label><input type="number" id="pQty"></div>
-        <div style="display:flex; gap:10px; margin-top:20px">
-            <button class="btn btn-primary" style="flex:1" onclick="saveProduction()">Save</button>
-            <button class="btn btn-danger" style="flex:1" onclick="closeProdModal()">Cancel</button>
-        </div>
-    </div>
-</div>
-
-<!-- CLIENT MODAL -->
-<div class="modal-overlay" id="clientModal">
-    <div class="modal">
-        <h3 style="margin-top:0">Client Details</h3>
-        <input type="hidden" id="cId"> <!-- Use Name as ID for simplicity or index -->
-        <div class="form-row"><label>Client Name</label><input type="text" id="cName" placeholder="e.g. Fathima Stores"></div>
-        <div class="form-row"><label>Phone Number</label><input type="text" id="cPhone" placeholder="Mobile"></div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
-            <div class="form-row"><label>Price: Dosa (₹)</label><input type="number" id="cPriceD" value="45"></div>
-            <div class="form-row"><label>Price: Appam (₹)</label><input type="number" id="cPriceA" value="55"></div>
-        </div>
-        <div style="display:flex; gap:10px; margin-top:20px">
-            <button class="btn btn-primary" style="flex:1" onclick="saveClient()">Save Client</button>
-            <button class="btn btn-danger" style="flex:1" onclick="closeClientModal()">Cancel</button>
-        </div>
-    </div>
-</div>
-
-<!-- STAFF MODAL -->
-<div class="modal-overlay" id="staffModal">
-    <div class="modal">
-        <h3 style="margin-top:0">Staff Details</h3>
-        <input type="hidden" id="sId">
-        <div class="form-row"><label>Staff Name</label><input type="text" id="sName" placeholder="e.g. Anand"></div>
-        <div class="form-row"><label>Type</label><select id="sType"><option value="PRODUCTION">Production Staff</option><option value="DELIVERY">Delivery / Driver</option></select></div>
-        <div class="form-row"><label>Primary Shop / Hub</label><select id="sShop"><option>Nettor</option><option>Kannankulangara</option><option>Vadakkekotta</option><option value="Common">Common / All</option></select></div>
-        <div style="display:flex; gap:10px; margin-top:20px">
-            <button class="btn btn-primary" style="flex:1" onclick="saveStaff()">Save Staff</button>
-            <button class="btn btn-danger" style="flex:1" onclick="closeStaffModal()">Cancel</button>
-        </div>
-    </div>
-</div>
-
-<!-- ROUTE MODAL -->
-<div class="modal-overlay" id="routeModal">
-    <div class="modal">
-        <h3 style="margin-top:0">Route Details</h3>
-        <input type="hidden" id="rIdx">
-        <div class="form-row"><label>Route Name</label><input type="text" id="rName" placeholder="e.g. Udhayamperoor"></div>
-        <div style="display:flex; gap:10px; margin-top:20px">
-            <button class="btn btn-primary" style="flex:1" onclick="saveRoute()">Save Route</button>
-            <button class="btn btn-danger" style="flex:1" onclick="closeRouteModal()">Cancel</button>
-        </div>
-    </div>
-</div>
-
-<!-- DELIVERY MODAL -->
-<div class="modal-overlay" id="delModal">
-    <div class="modal">
-        <h3 style="margin-top:0">Delivery Entry</h3>
-        <input type="hidden" id="dId">
-        <input type="hidden" id="dTypeOrig">
-        <div class="form-row"><label>Driver</label><select id="dDriver"></select></div>
-        <div class="form-row"><label>Type</label><select id="dType"><option>PACKET</option><option>LOOSE</option></select></div>
-        <div class="form-row"><label>From Hub</label><select id="dHub"><option>Nettor</option><option>Kannankulangara</option><option>Vadakkekotta</option></select></div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
-            <div class="form-row"><label>Dosa (L)</label><input type="number" id="dDosa"></div>
-            <div class="form-row"><label>Appam (L)</label><input type="number" id="dAppam"></div>
-        </div>
-        <div style="display:flex; gap:10px; margin-top:20px">
-            <button class="btn btn-primary" style="flex:1" onclick="saveDelivery()">Save Trip</button>
-            <button class="btn btn-danger" style="flex:1" onclick="closeDelModal()">Cancel</button>
-        </div>
-    </div>
-</div>
-
-<script>
 const firebaseConfig = {
   apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
   authDomain: "iyers-c0944.firebaseapp.com",
@@ -666,38 +159,25 @@ function deleteDoc(ref) { return ref.delete(); }
 
     /* --- INIT --- */
     window.onload = function() {
-        try {
-            if(document.getElementById('prodDate')) document.getElementById('prodDate').value = currentDate;
-            if(document.getElementById('delDate')) document.getElementById('delDate').value = currentDate;
-            
-            // Populate Staff Select in Modal
-            if(document.getElementById('pShop')) {
-                document.getElementById('pShop').addEventListener('change', updateModalStaff);
-                updateModalStaff();
-            }
-
-            loadData();
-        } catch(e) {
-            console.error("Initialization error:", e);
+        if(document.getElementById('prodDate')) document.getElementById('prodDate').value = currentDate;
+        if(document.getElementById('delDate')) document.getElementById('delDate').value = currentDate;
+        
+        // Populate Staff Select in Modal
+        if(document.getElementById('pShop')) {
+            document.getElementById('pShop').addEventListener('change', updateModalStaff);
+            updateModalStaff();
         }
+
+        loadData();
     };
 
     function nav(id, el) {
-        try {
-            document.querySelectorAll('.content').forEach(d=>d.classList.remove('active'));
-            const target = document.getElementById(id);
-            if(target) target.classList.add('active');
-            
-            document.querySelectorAll('.nav-item').forEach(d=>d.classList.remove('active'));
-            if(el) el.classList.add('active');
-            
-            const title = document.getElementById('pageTitle');
-            if(title && el) title.innerText = el.innerText;
-        } catch(e) {
-            console.error("Navigation error:", e);
-        }
+        document.querySelectorAll('.content').forEach(d=>d.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(d=>d.classList.remove('active'));
+        el.classList.add('active');
+        document.getElementById('pageTitle').innerText = el.innerText;
     }
-    window.nav = nav;
 
     // Expose functions and state to global scope
     function syncWindow() {
@@ -776,9 +256,7 @@ function deleteDoc(ref) { return ref.delete(); }
     function loadRouteMaster() {
         onSnapshot(doc(db, "data", "routeMaster"), (snapshot) => {
             if(snapshot.exists) {
-                routeMasterDB = (snapshot.data().list || [])
-                    .map(r => typeof r === "string" ? { name: r } : r)
-                    .filter(r => r && r.name);
+                routeMasterDB = snapshot.data().list || [];
             } else {
                 routeMasterDB = ["Udhayamperoor", "Nettoor", "Kannankulangara", "Vadakkekotta"].map(n => ({name: n}));
                 saveRouteMasterDB();
@@ -975,7 +453,7 @@ function deleteDoc(ref) { return ref.delete(); }
         saveRouteMasterDB();
     }
     function renderRouteMaster() {
-        const tbody = document.getElementById('routeTable');
+        const tbody = document.getElementById('routeMasterTable');
         if(!tbody) return;
         tbody.innerHTML = "";
         routeMasterDB.forEach((r, idx) => {
@@ -1465,11 +943,11 @@ function deleteDoc(ref) { return ref.delete(); }
                 const totalD = dSale + dCr;
                 const totalA = aSale + aCr;
 
-                if(totalD > 0 || totalA > 0 || s.cashReceived || s.gpayReceived) {
+                if(totalD > 0 || totalA > 0 || s.cashReceived) {
                     if(!shopActivity[sName]) shopActivity[sName] = { dosa:0, appam:0, cash:0, cats:[] };
                     shopActivity[sName].dosa += totalD;
                     shopActivity[sName].appam += totalA;
-                    shopActivity[sName].cash += (Number(s.cashReceived)||0) + (Number(s.gpayReceived)||0);
+                    shopActivity[sName].cash += (Number(s.cashReceived)||0);
                     if(!shopActivity[sName].cats.includes(cat)) shopActivity[sName].cats.push(cat);
                 }
             });
@@ -1535,13 +1013,13 @@ function deleteDoc(ref) { return ref.delete(); }
                     const soldVal = ((Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0))*pD + 
                                     ((Number(s.appam.sale)||0) + (Number(s.appam.cr)||0))*pA;
                     clientSummary[sName].sold += soldVal;
-                    clientSummary[sName].paid += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
+                    clientSummary[sName].paid += (Number(s.cashReceived) || 0);
 
                     // Track driver collections for the CURRENT SELECTED DATE
                     if(d === todayStr) {
                         const dr = s.driver || "Undefined";
                         if(!driverToday[dr]) driverToday[dr] = 0;
-                        driverToday[dr] += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
+                        driverToday[dr] += (Number(s.cashReceived) || 0);
                     }
                 });
             });
@@ -1652,6 +1130,3 @@ function deleteDoc(ref) { return ref.delete(); }
         }
     }
 
-</script>
-</body>
-</html>
