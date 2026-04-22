@@ -274,7 +274,7 @@
         <ul class="nav-list">
              <li class="nav-item active" onclick="switchSection('overview')"><span class="nav-icon">📊</span> Overview</li>
              <li class="nav-item" onclick="switchSection('stock')"><span class="nav-icon">🚚</span> Stock Operations</li>
-             <li class="nav-item" onclick="switchSection('members')"><span class="nav-icon">👤</span> Member Logs</li>
+             <li class="nav-item" onclick="switchSection('members')"><span class="nav-icon">👤</span> Route Logs</li>
              <li class="nav-item" onclick="switchSection('shops')"><span class="nav-icon">🛒</span> Shop Sales</li>
              <li class="nav-item" onclick="switchSection('tally')"><span class="nav-icon">📝</span> Tally Sheet</li>
         </ul>
@@ -292,7 +292,7 @@
              
              <div class="top-controls">
                  <select id="globalDriverSelect" class="top-select" onchange="setGlobalDriver(this.value)">
-                    <option value="">All Drivers</option>
+                    <option value="">All Routes</option>
                  </select>
             
                  <div class="date-pill" onclick="openDatePicker()">
@@ -407,19 +407,24 @@
     <div class="card">
         <div class="card-head">
             <span>1. Load Stock (Trip)</span>
-            <span style="font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px">STOCK IN</span>
         </div>
-        <div class="trip-form">
-            <div style="margin-bottom:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px">
-                <select id="activeHub">
-                    <option value="ALL">All Hubs</option>
-                    <option value="Nettor">Nettor Shop </option>
-                    <option value="Kannankulangara">Kannankulangara Shop</option>
-                    <option value="Vadakkekotta">Vadakkekotta Shop</option>
-                </select>
-                <select id="tripDriver">
-                    <option value="">Select Driver...</option>
-                </select>
+        <div class="card-body">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px">
+                <div class="input-group">
+                    <label>Hub / Source</label>
+                    <select id="activeHub">
+                        <option value="ALL">All Hubs</option>
+                        <option>Nettor</option>
+                        <option>Kannankulangara</option>
+                        <option>Vadakkekotta</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Route</label>
+                    <select id="tripDriver">
+                        <option value="">Select Route...</option>
+                    </select>
+                </div>
             </div>
             <div class="form-grid">
                 <div class="qty-group"><label style="color:var(--dosa-color)">Dosa Qty</label><input type="number" id="tripDosa" placeholder="0"></div>
@@ -429,7 +434,7 @@
         </div>
         <div id="tripLogContainer" style="border-top:1px solid #f1f5f9; display:none;">
             <table>
-                <thead><tr><th>Hub</th><th>Drvr</th><th style="text-align:right">D</th><th style="text-align:right">A</th><th></th></tr></thead>
+                <thead><tr><th>Hub</th><th>Route</th><th style="text-align:right">D</th><th style="text-align:right">A</th><th></th></tr></thead>
                 <tbody id="tripLogBody"></tbody>
             </table>
         </div>
@@ -442,8 +447,8 @@
     <section id="members" class="content-section">
     <div class="card" style="border:none; background:transparent; box-shadow:none; margin-bottom:8px">
         <div class="card-head" style="background:transparent; padding-left:0; color:var(--text-main)">
-            <span>3. Delivery Member Logs</span>
-            <span style="font-size:11px">Member-wise History</span>
+            <span>3. Delivery Route Logs</span>
+            <span style="font-size:11px">Route-wise History</span>
         </div>
     </div>
 
@@ -633,6 +638,7 @@
         globalDB[date] = normalizeRouteDay(globalDB[date], currentCategory);
         currentData = globalDB[date][currentCategory];
         initShopDataForDate(date);
+        await hydrateRouteHistoryForBalances(date);
         pastDuesCache = {};
         SHOP_LIST.forEach(shop => {
             const bal = getPendingBalance(shop, date);
@@ -739,23 +745,167 @@
         return DEFAULT_PRICES[type];
     }
 
-    function loadStaff() {
-        db.collection("data").doc("staff").onSnapshot((snap) => {
+    function generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    }
+
+    function getEmptyShopEntry(driver = "") {
+        return {
+            driver,
+            dosa: { sale: '', cr: '', dmg: '', free: '' },
+            appam: { sale: '', cr: '', dmg: '', free: '' },
+            cashReceived: '',
+            gpayReceived: ''
+        };
+    }
+
+    function normalizeShopEntry(entry = {}) {
+        return {
+            ...getEmptyShopEntry(entry.driver || ""),
+            ...entry,
+            dosa: { ...getEmptyShopEntry().dosa, ...(entry.dosa || {}) },
+            appam: { ...getEmptyShopEntry().appam, ...(entry.appam || {}) }
+        };
+    }
+
+    function initShopDataForDate(date) {
+        if (!globalDB[date]) globalDB[date] = getEmptyRouteDay();
+        globalDB[date] = normalizeRouteDay(globalDB[date], currentCategory);
+
+        ['PACKET', 'LOOSE'].forEach(cat => {
+            const catData = globalDB[date][cat];
+            if (!catData.shops) catData.shops = {};
+            if (!catData.activeShops) catData.activeShops = [];
+            if (!catData.tally) catData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] };
+            if (!catData.tally.cashInHandMap) catData.tally.cashInHandMap = {};
+            if (!catData.tally.denomsMap) catData.tally.denomsMap = {};
+            if (!Array.isArray(catData.tally.expenses)) catData.tally.expenses = [];
+            if (!Array.isArray(catData.tally.extraIncome)) catData.tally.extraIncome = [];
+
+            SHOP_LIST.forEach(shop => {
+                catData.shops[shop] = normalizeShopEntry(catData.shops[shop]);
+            });
+        });
+
+        currentData = globalDB[date][currentCategory];
+    }
+
+    function getShopDayValue(shop, dayData) {
+        let sold = 0;
+        let paid = 0;
+        ['PACKET', 'LOOSE'].forEach(cat => {
+            const s = dayData?.[cat]?.shops?.[shop];
+            if (!s) return;
+            const pD = getPrice(shop, 'dosa');
+            const pA = getPrice(shop, 'appam');
+            sold += ((Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0)) * pD;
+            sold += ((Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0)) * pA;
+            paid += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
+        });
+        return { sold, paid };
+    }
+
+    function getPaymentTotal(shopData) {
+        return (Number(shopData?.cashReceived) || 0) + (Number(shopData?.gpayReceived) || 0);
+    }
+
+    function hasShopEntryActivity(shopData) {
+        return !!(
+            shopData?.dosa?.sale || shopData?.dosa?.cr ||
+            shopData?.appam?.sale || shopData?.appam?.cr ||
+            shopData?.cashReceived || shopData?.gpayReceived
+        );
+    }
+
+    function getPendingBalance(shop, beforeDate) {
+        return Object.keys(globalDB)
+            .filter(date => date < beforeDate)
+            .sort()
+            .reduce((total, date) => {
+                const day = getShopDayValue(shop, globalDB[date]);
+                return total + day.sold - day.paid;
+            }, 0);
+    }
+
+    function getDuesBreakdown(shop, uptoDate) {
+        return Object.keys(globalDB)
+            .filter(date => date <= uptoDate)
+            .sort()
+            .map(date => {
+                const dayData = globalDB[date] || {};
+                let dosa = 0, appam = 0, value = 0, cash = 0;
+                ['PACKET', 'LOOSE'].forEach(cat => {
+                    const s = dayData?.[cat]?.shops?.[shop];
+                    if (!s) return;
+                    const dQty = (Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0);
+                    const aQty = (Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0);
+                    dosa += dQty;
+                    appam += aQty;
+                    value += dQty * getPrice(shop, 'dosa') + aQty * getPrice(shop, 'appam');
+                    cash += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
+                });
+                return { date, dosa, appam, value, cash };
+            })
+            .filter(row => row.value > 0 || row.cash > 0);
+    }
+
+    function getLastDriver(shop, uptoDate) {
+        return Object.keys(globalDB)
+            .filter(date => date <= uptoDate)
+            .sort()
+            .reverse()
+            .reduce((found, date) => {
+                if (found) return found;
+                const dayData = globalDB[date] || {};
+                for (const cat of ['PACKET', 'LOOSE']) {
+                    const driver = dayData?.[cat]?.shops?.[shop]?.driver;
+                    if (driver) return driver;
+                }
+                return "";
+            }, "");
+    }
+
+    async function hydrateRouteHistoryForBalances(activeDate) {
+        try {
+            const routeSnap = await db.collection("routeDays").get();
+            routeSnap.forEach(routeDoc => {
+                if (routeDoc.id === activeDate) return;
+                globalDB[routeDoc.id] = normalizeRouteDay(routeDoc.data(), currentCategory);
+            });
+
+            const legacySnap = await db.collection("data").doc("route").get();
+            if (legacySnap.exists) {
+                const legacyData = legacySnap.data() || {};
+                Object.keys(legacyData).forEach(dateKey => {
+                    if (dateKey !== activeDate && !globalDB[dateKey]) {
+                        globalDB[dateKey] = normalizeRouteDay(legacyData[dateKey], currentCategory);
+                    }
+                });
+            }
+
+            localStorage.setItem(DB_KEY, JSON.stringify(globalDB));
+        } catch (err) {
+            console.error("Route history load error:", err);
+        }
+    }
+
+    function loadRouteMaster() {
+        db.collection("data").doc("routeMaster").onSnapshot((snap) => {
             if(snap.exists) {
                 const list = snap.data().list || [];
-                const drivers = list.filter(s => s.type === 'DELIVERY').map(s => s.name).sort();
+                const routes = list.map(s => s.name).sort();
                 
                 const gds = document.getElementById('globalDriverSelect');
                 const tds = document.getElementById('tripDriver');
                 
                 if(gds) {
                     const current = gds.value;
-                    gds.innerHTML = '<option value="">All Drivers</option>' + drivers.map(d => `<option>${d}</option>`).join("");
+                    gds.innerHTML = '<option value="">All Routes</option>' + routes.map(d => `<option>${d}</option>`).join("");
                     gds.value = current;
                 }
                 if(tds) {
                     const current = tds.value;
-                    tds.innerHTML = '<option value="">Select Driver...</option>' + drivers.map(d => `<option>${d}</option>`).join("");
+                    tds.innerHTML = '<option value="">Select Route...</option>' + routes.map(d => `<option>${d}</option>`).join("");
                     tds.value = current;
                 }
             }
@@ -781,353 +931,111 @@
             if (!globalDB[selectedDate]) globalDB[selectedDate] = getEmptyRouteDay();
             globalDB[selectedDate] = normalizeRouteDay(globalDB[selectedDate], currentCategory);
             currentData = globalDB[selectedDate][currentCategory];
-
-            // Start loading process
-            await loadDate(lastDate);
-
-            // Restore other selections
-            const lastHub      = localStorage.getItem('IYERS_LAST_HUB');
-            const lastDriver   = localStorage.getItem('IYERS_LAST_DRIVER');
-            const lastCategory = localStorage.getItem('IYERS_LAST_CATEGORY');
-            const lastSection  = localStorage.getItem('IYERS_LAST_SECTION');
-
-            const workDateInput = document.getElementById('workDate');
-            if (workDateInput) {
-                workDateInput.value = lastDate;
-                workDateInput.onchange = () => loadDate(workDateInput.value);
-            }
-
-            const activeHubSelect = document.getElementById('activeHub');
-            if (activeHubSelect) {
-                if (lastHub) activeHubSelect.value = lastHub;
-                activeHubSelect.onchange = () => {
-                    localStorage.setItem('IYERS_LAST_HUB', activeHubSelect.value);
-                    fullRender();
-                };
-            }
-
-            if (lastDriver) setGlobalDriver(lastDriver);
-            if (lastCategory) setCategory(lastCategory);
-            if (lastSection) switchSection(lastSection);
-
-            // Background load clients (non-blocking for UI)
+            
+            // Apply listeners and bootup
             loadClients();
-            loadStaff();
+            loadRouteMaster();
+            
+            const dInput = document.getElementById('workDate');
+            if(dInput) dInput.value = selectedDate;
+            const ds = document.getElementById('dateDisplay');
+            if(ds) ds.innerText = new Date(selectedDate).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
 
-            // Cross-tab sync via localStorage events
-            window.addEventListener('storage', (e) => {
-                const syncKeys = [DB_KEY, CLIENT_DB_KEY];
-                if (syncKeys.includes(e.key)) {
-                    if (e.key === CLIENT_DB_KEY) {
-                        loadClients();
-                    } else if (e.key === DB_KEY) {
-                        const raw = localStorage.getItem(DB_KEY);
-                        if (raw) {
-                             globalDB = JSON.parse(raw);
-                             currentData = globalDB[selectedDate]?.[currentCategory] || currentData;
-                        }
-                    }
-                    fullRender();
-                }
-            });
+            if(dInput) {
+                dInput.addEventListener('change', (e) => {
+                    selectedDate = e.target.value;
+                    document.getElementById('dateDisplay').innerText = new Date(selectedDate).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+                    loadDateFromFirestore(selectedDate);
+                });
+            }
+            
+            document.querySelectorAll('.sw-option').forEach(btn => btn.classList.remove('active'));
+            const cBtn = document.querySelector(`.sw-option[data-cat="${currentCategory}"]`);
+            if(cBtn) cBtn.classList.add('active');
 
-            console.log("IyersRoute V3.1 Initialization Complete.");
-        } catch (err) {
-            console.error("Initialization failed:", err);
-            // Even if everything fails, try to show the date
-            const today = new Date().toISOString().split('T')[0];
-            loadDate(today).catch(e => {});
+            // Set section
+            switchSection('overview');
+
+            loadDateFromFirestore(selectedDate);
+            console.log("Initialization complete!");
+        } catch(err) {
+            console.error("Init err:", err);
         }
     };
 
     function toggleSidebar() {
-        const sb = document.getElementById('sidebar');
-        const overlay = document.querySelector('.sidebar-overlay');
-        if (sb) sb.classList.toggle('open');
-        if (overlay) overlay.classList.toggle('show');
+        document.getElementById('sidebar').classList.toggle('open');
+        document.querySelector('.sidebar-overlay').classList.toggle('show');
     }
 
-    // Opens the native date picker immediately when the calendar pill is tapped.
-    // Uses the modern showPicker() API; falls back to .click() on older browsers.
-    function openDatePicker() {
-        const input = document.getElementById('workDate');
-        if (!input) return;
-        try {
-            input.showPicker();
-        } catch (e) {
-            input.click();
-        }
-    }
-
-    function switchSection(sectionId) {
-        console.log("Switching to section:", sectionId);
-        activeSection = sectionId;
-        localStorage.setItem('IYERS_LAST_SECTION', sectionId);
+    function switchSection(section) {
+        activeSection = section;
+        document.querySelectorAll('.content-section').forEach(el => el.classList.remove('active'));
+        const sEl = document.getElementById(section);
+        if(sEl) sEl.classList.add('active');
         
-        // Update Nav Menu UI
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.classList.remove('active');
-            // More robust match: checks if the sectionId is present in attribute
-            const clickAttr = item.getAttribute('onclick') || "";
-            if (clickAttr.includes(`'${sectionId}'`) || clickAttr.includes(`"${sectionId}"`)) {
-                item.classList.add('active');
-            }
-        });
-
-        // Toggle visibility of specific section
-        const section = document.getElementById(sectionId);
-        if (section) {
-            document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
-            section.classList.add('active');
-        } else {
-            console.warn("Section not found:", sectionId);
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        const navEvent = document.querySelector(`.nav-item[onclick="switchSection('${section}')"]`);
+        if(navEvent) navEvent.classList.add('active');
+        
+        const isMobile = window.innerWidth <= 1024;
+        if(isMobile) {
+            document.getElementById('sidebar').classList.remove('open');
+            document.querySelector('.sidebar-overlay').classList.remove('show');
         }
 
-        // Auto-close sidebar on mobile
-        if (window.innerWidth <= 1024) {
-            const sb = document.getElementById('sidebar');
-            const overlay = document.querySelector('.sidebar-overlay');
-            if(sb) sb.classList.remove('open');
-            if(overlay) overlay.classList.remove('show');
-        }
+        if(section === 'overview') renderStats();
+        if(section === 'shops') renderShops();
+        if(section === 'stock' || section === 'members') renderLogs();
+        if(section === 'members') renderDeliveryMemberLogs();
+        if(section === 'tally') renderTally();
     }
 
     function setCategory(cat) {
         currentCategory = cat;
-        localStorage.setItem('IYERS_LAST_CATEGORY', cat);
-        document.querySelectorAll('.sw-option[data-cat]').forEach(o => {
-            o.classList.remove('active');
-            if (o.dataset.cat === cat) o.classList.add('active');
-        });
-        if (selectedDate && globalDB[selectedDate]) {
-            if (!globalDB[selectedDate][currentCategory]) {
-                globalDB[selectedDate][currentCategory] = { trips: [], returns: [], shops: {} };
-            }
-            currentData = globalDB[selectedDate][currentCategory];
-            initShopDataForDate(selectedDate);
-            fullRender();
-        }
+        document.querySelectorAll('.sw-option').forEach(el => el.classList.remove('active'));
+        const btn = document.querySelector(`.sw-option[data-cat="${cat}"]`);
+        if(btn) btn.classList.add('active');
+
+        if (!globalDB[selectedDate]) globalDB[selectedDate] = getEmptyRouteDay();
+        globalDB[selectedDate] = normalizeRouteDay(globalDB[selectedDate], currentCategory);
+        currentData = globalDB[selectedDate][currentCategory];
+        
+        fullRender();
     }
 
-    function loadDate(date) {
-        selectedDate = date;
-        localStorage.setItem('IYERS_LAST_DATE', date);
-        const displayEl = document.getElementById('dateDisplay');
-        if (displayEl) {
-            displayEl.innerText = new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-        }
-        // Delegate to Firebase-backed loader
-        loadDateFromFirestore(date);
-    }
+    function updateGlobalType(cat, el) { setCategory(cat); }
 
     function setGlobalDriver(driver) {
         selectedDriver = driver;
-        localStorage.setItem('IYERS_LAST_DRIVER', driver);
-        const select = document.getElementById('globalDriverSelect');
-        if (select) select.value = driver;
-        if (typeof tripDriver !== 'undefined' && tripDriver) tripDriver.value = driver;
-        fullRender();
+        
+        const sel = document.getElementById('globalDriverSelect');
+        if (sel && sel.value !== driver) sel.value = driver;
+
+        renderStats();
+        renderShops();
+        renderDeliveryMemberLogs();
+        renderCreditAlerts();
     }
 
-    function getLastDriver(shopName, targetDate) {
-        const dates = Object.keys(globalDB).sort().reverse();
-        for (const d of dates) {
-            if (d > targetDate) continue;
-            const dayDataObj = globalDB[d];
-            if (!dayDataObj) continue;
-            const cats = ['PACKET', 'LOOSE'];
-            for (const cat of cats) {
-                if (dayDataObj[cat]?.shops?.[shopName]?.driver) return dayDataObj[cat].shops[shopName].driver;
-            }
-        }
-        return null;
+    function openDatePicker() {
+        const dInput = document.getElementById('workDate');
+        if(dInput) dInput.showPicker();
     }
 
-    function initShopDataForDate(date) {
-        SHOP_LIST.forEach(shop => {
-            if (!currentData.shops[shop]) {
-                currentData.shops[shop] = {
-                    dosa: { sale: '', cr: '', dmg: '', free: '' },
-                    appam: { sale: '', cr: '', dmg: '', free: '' },
-                    cashReceived: '',
-                    gpayReceived: ''
-                };
-            } else {
-                if (!currentData.shops[shop].cashReceived) currentData.shops[shop].cashReceived = '';
-                if (!currentData.shops[shop].gpayReceived) currentData.shops[shop].gpayReceived = '';
-            }
-        });
-        if (!currentData.tally) {
-            currentData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [] };
-        } else {
-            if (!currentData.tally.cashInHandMap) currentData.tally.cashInHandMap = {};
-            if (!currentData.tally.denomsMap) currentData.tally.denomsMap = {};
-        }
-        if (!currentData.activeShops) currentData.activeShops = [];
-    }
-
-    function generateId() { return Date.now().toString(36); }
-
-    function getPendingBalance(shopName, targetDate) {
-        let totalValueSent = 0;
-        let totalCashPaid = 0;
-        const dates = Object.keys(globalDB).sort();
-        for (const d of dates) {
-            if (d >= targetDate) break;
-            const dayDataObj = globalDB[d];
-            if (!dayDataObj) continue;
-            Object.keys(dayDataObj).forEach(cat => {
-                const data = dayDataObj[cat];
-                if (data && data.shops && data.shops[shopName]) {
-                    const s = data.shops[shopName];
-                    const pD = getPrice(shopName, 'dosa');
-                    const pA = getPrice(shopName, 'appam');
-                    totalValueSent += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * pD +
-                                      ((Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0)) * pA;
-                    totalCashPaid += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
-                }
-            });
-        }
-        return totalValueSent - totalCashPaid;
-    }
-
-    function getDuesBreakdown(shopName, targetDate) {
-        let breakdown = [];
-        const dates = Object.keys(globalDB).sort();
-        for (const d of dates) {
-            if (d > targetDate) break;
-            const dayDataObj = globalDB[d];
-            if (!dayDataObj) continue;
-            let dateDosa = 0, dateAppam = 0, dateCash = 0, hasDateActivity = false;
-            Object.keys(dayDataObj).forEach(cat => {
-                const data = dayDataObj[cat];
-                if (data && data.shops && data.shops[shopName]) {
-                    const s = data.shops[shopName];
-                    dateDosa  += (Number(s.dosa?.sale)||0)  + (Number(s.dosa?.cr)||0);
-                    dateAppam += (Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0);
-                    dateCash  += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
-                    hasDateActivity = true;
-                }
-            });
-            if (hasDateActivity) {
-                const pD = getPrice(shopName, 'dosa');
-                const pA = getPrice(shopName, 'appam');
-                const dateVal = (dateDosa * pD) + (dateAppam * pA);
-                if (dateVal > 0 || dateCash > 0) {
-                    breakdown.push({ date: d, dosa: dateDosa, appam: dateAppam, cash: dateCash, value: dateVal });
-                }
-            }
-        }
-        return breakdown;
-    }
-
-    /* --- LOGIC: TRIPS & RETURNS --- */
-    async function addTrip() {
-        const activeHubSelect = document.getElementById('activeHub');
-        const tripDriverSelect = document.getElementById('tripDriver');
-        const tripDosaInput = document.getElementById('tripDosa');
-        const tripAppamInput = document.getElementById('tripAppam');
-        const btnAddTrip = document.querySelector('.btn-add-trip');
-
-        if (!activeHubSelect || !tripDriverSelect || !tripDosaInput || !tripAppamInput) {
-            console.error("Form elements not found");
-            return;
-        }
-
-        const hub = activeHubSelect.value;
-        if (hub === "ALL") return alert("Select a specific Hub");
-        
-        const driver = tripDriverSelect.value;
-        if (!driver) return alert("Select Driver");
-        
-        const dQty = Number(tripDosaInput.value) || 0;
-        const aQty = Number(tripAppamInput.value) || 0;
-        
-        if (dQty === 0 && aQty === 0) return alert("Enter quantity");
-
-        if (window.editState && window.editState.trip) {
-            // Update Existing
-            const idx = currentData.trips.findIndex(t => t.id === window.editState.trip);
-            if (idx !== -1) {
-                currentData.trips[idx] = { ...currentData.trips[idx], hub, driver, dosa: dQty, appam: aQty };
-                window.editState.trip = null;
-                if (btnAddTrip) {
-                    btnAddTrip.innerText = "+ Add Trip";
-                    btnAddTrip.style.background = ""; // Reset to CSS default
-                }
-            }
-        } else {
-            // New Entry
-            currentData.trips.push({ id: generateId(), hub, driver, dosa: dQty, appam: aQty });
-        }
-        
-        // Reset Inputs
-        tripDosaInput.value = ""; 
-        tripAppamInput.value = ""; 
-        
-        // Save and Render
-        await saveData(); 
-        fullRender();
-    }
-
-    function editTrip(id) {
-        const activeHubSelect = document.getElementById('activeHub');
-        const tripDriverSelect = document.getElementById('tripDriver');
-        const tripDosaInput = document.getElementById('tripDosa');
-        const tripAppamInput = document.getElementById('tripAppam');
-        const btnAddTrip = document.querySelector('.btn-add-trip');
-
-        const t = currentData.trips.find(t => t.id === id);
-        if (!t || !activeHubSelect || !tripDriverSelect || !tripDosaInput || !tripAppamInput) return;
-        
-        activeHubSelect.value = t.hub;
-        tripDriverSelect.value = t.driver;
-        tripDosaInput.value = t.dosa;
-        tripAppamInput.value = t.appam;
-        
-        window.editState.trip = id;
-        if (btnAddTrip) {
-            btnAddTrip.innerText = "Update Trip";
-            btnAddTrip.style.background = "var(--primary)";
-            btnAddTrip.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-    }
-
-    async function deleteTrip(id) {
-        if (!confirm("Delete this trip?")) return;
-        
-        currentData.trips = currentData.trips.filter(t => t.id !== id);
-        
-        if (window.editState && window.editState.trip === id) {
-             window.editState.trip = null;
-             const btnAddTrip = document.querySelector('.btn-add-trip');
-             if (btnAddTrip) {
-                btnAddTrip.innerText = "+ Add Trip";
-                btnAddTrip.style.background = "";
-             }
-             const tripDosaInput = document.getElementById('tripDosa');
-             const tripAppamInput = document.getElementById('tripAppam');
-             if (tripDosaInput) tripDosaInput.value = "";
-             if (tripAppamInput) tripAppamInput.value = "";
-        }
-        
-        await saveData(); 
-        fullRender();
-    }
-
-
-
-    /* --- LOGIC: SHOPS --- */
-    function updateShopData(shop, type, field, val) {
+    function updateShopValue(shop, type, field, val) {
         if(!selectedDriver) {
-            alert("⚠️ PLEASE SELECT A DRIVER FIRST!\n\nEvery driver delivers to different shops. Please select a driver from the chips above before entering sales data.");
+            alert("⚠️ PLEASE SELECT A ROUTE FIRST!\n\nPlease select a route from the dropdown above before entering sales data.");
             renderShops();
             return;
         }
         if(!currentData.activeShops) currentData.activeShops = [];
         if(!currentData.activeShops.includes(shop)) currentData.activeShops.push(shop);
+
+        if(!currentData.shops[shop]) currentData.shops[shop] = { dosa:{}, appam:{} };
+        if(!currentData.shops[shop][type]) currentData.shops[shop][type] = {};
         
-        currentData.shops[shop][type][field] = val; 
+        currentData.shops[shop][type][field] = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
         saveData(); 
         updateShopRowUI(shop); 
@@ -1136,6 +1044,71 @@
         if(idx !== -1) updateShopBalance(shop, idx);
 
         refreshDynamicUI(); 
+    }
+
+    function updateShopData(shop, type, field, val) {
+        updateShopValue(shop, type, field, val);
+    }
+
+    function resetTripForm() {
+        window.editState.trip = null;
+        const tripDosa = document.getElementById('tripDosa');
+        const tripAppam = document.getElementById('tripAppam');
+        const tripDriver = document.getElementById('tripDriver');
+        const addBtn = document.querySelector('.btn-add-trip');
+        if (tripDosa) tripDosa.value = "";
+        if (tripAppam) tripAppam.value = "";
+        if (tripDriver) tripDriver.value = selectedDriver || "";
+        if (addBtn) addBtn.innerText = "+ Add Trip";
+    }
+
+    function addTrip() {
+        const hub = document.getElementById('activeHub')?.value || "";
+        const driver = document.getElementById('tripDriver')?.value || selectedDriver;
+        const dosa = Number(document.getElementById('tripDosa')?.value) || 0;
+        const appam = Number(document.getElementById('tripAppam')?.value) || 0;
+
+        if (!driver) return alert("Please select a route before adding stock.");
+        if (!hub || hub === "ALL") return alert("Please select the source hub before adding stock.");
+        if (dosa <= 0 && appam <= 0) return alert("Enter Dosa or Appam quantity.");
+
+        if (!currentData.trips) currentData.trips = [];
+        const existingId = window.editState.trip;
+        if (existingId) {
+            const idx = currentData.trips.findIndex(t => t.id === existingId);
+            if (idx !== -1) currentData.trips[idx] = { ...currentData.trips[idx], hub, driver, dosa, appam };
+        } else {
+            currentData.trips.push({ id: generateId(), hub, driver, dosa, appam });
+        }
+
+        if (driver) setGlobalDriver(driver);
+        saveData();
+        resetTripForm();
+        renderLogs();
+        refreshDynamicUI();
+    }
+
+    function editTrip(id) {
+        const trip = (currentData.trips || []).find(t => t.id === id);
+        if (!trip) return;
+        window.editState.trip = id;
+        const activeHub = document.getElementById('activeHub');
+        const tripDriver = document.getElementById('tripDriver');
+        if (activeHub) activeHub.value = trip.hub || "Nettor";
+        if (tripDriver) tripDriver.value = trip.driver || "";
+        document.getElementById('tripDosa').value = trip.dosa || "";
+        document.getElementById('tripAppam').value = trip.appam || "";
+        const addBtn = document.querySelector('.btn-add-trip');
+        if (addBtn) addBtn.innerText = "Update Trip";
+    }
+
+    function deleteTrip(id) {
+        if (!confirm("Delete this trip?")) return;
+        currentData.trips = (currentData.trips || []).filter(t => t.id !== id);
+        saveData();
+        resetTripForm();
+        renderLogs();
+        refreshDynamicUI();
     }
     
     function updateCashReceived(shop, val, idx) {
@@ -1147,6 +1120,7 @@
         if(!currentData.activeShops) currentData.activeShops = [];
         if(!currentData.activeShops.includes(shop)) currentData.activeShops.push(shop);
 
+        currentData.shops[shop] = normalizeShopEntry(currentData.shops[shop]);
         currentData.shops[shop].cashReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
         saveData();
@@ -1164,6 +1138,7 @@
         if(!currentData.activeShops) currentData.activeShops = [];
         if(!currentData.activeShops.includes(shop)) currentData.activeShops.push(shop);
 
+        currentData.shops[shop] = normalizeShopEntry(currentData.shops[shop]);
         currentData.shops[shop].gpayReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
         saveData();
@@ -1172,9 +1147,9 @@
         refreshDynamicUI();
     }
     
-    function updateShopBalance(shop, idx) {
+    function updateShopBalanceLegacy(shop, idx) {
         const prevDues = getPendingBalance(shop, selectedDate);
-        let todaySaleOnly = 0;  // Sale amount only (no credit)
+        let todayBillValue = 0;
         let cashRec = 0;
         let gpayRec = 0;
 
@@ -1186,8 +1161,8 @@
         // the moment a credit/dmg/free field is changed.
         const sLocal = currentData.shops[shop];
         if (sLocal) {
-            todaySaleOnly += (Number(sLocal.dosa?.sale) || 0) * pD +
-                             (Number(sLocal.appam?.sale) || 0) * pA;
+            todayBillValue += ((Number(sLocal.dosa?.sale) || 0) + (Number(sLocal.dosa?.cr) || 0)) * pD +
+                              ((Number(sLocal.appam?.sale) || 0) + (Number(sLocal.appam?.cr) || 0)) * pA;
             cashRec  += Number(sLocal.cashReceived)  || 0;
             gpayRec  += Number(sLocal.gpayReceived)  || 0;
         }
@@ -1201,8 +1176,8 @@
                 if (!catObj || !catObj.shops) return;
                 const s = catObj.shops[shop];
                 if (!s) return;
-                todaySaleOnly += (Number(s.dosa?.sale) || 0) * pD +
-                                 (Number(s.appam?.sale) || 0) * pA;
+                todayBillValue += ((Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0)) * pD +
+                                  ((Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0)) * pA;
                 cashRec  += Number(s.cashReceived)  || 0;
                 gpayRec  += Number(s.gpayReceived)  || 0;
             });
@@ -1210,7 +1185,7 @@
 
         // Closing Balance = Previous Dues + Today's Sale (sale only) - Payments
         // Credit is NOT included here — it's tracked in Overview & Tally only
-        const totalTarget = prevDues + todaySaleOnly;
+        const totalTarget = prevDues + todayBillValue;
         const balance = totalTarget - cashRec - gpayRec;
         
         const balEl = document.getElementById(`balance-${idx}`);
@@ -1230,13 +1205,50 @@
         }
         if(totEl) totEl.innerText = `₹${todaySaleOnly}`;
     }
+    function updateShopBalance(shop, idx) {
+        const prevDues = getPendingBalance(shop, selectedDate);
+        let todayBillValue = 0;
+        let paid = 0;
+        const pD = getPrice(shop, 'dosa');
+        const pA = getPrice(shop, 'appam');
+
+        const addShop = (s) => {
+            if (!s) return;
+            todayBillValue += ((Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0)) * pD;
+            todayBillValue += ((Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0)) * pA;
+            paid += getPaymentTotal(s);
+        };
+
+        addShop(currentData.shops[shop]);
+
+        const dayData = globalDB[selectedDate];
+        if (dayData) {
+            Object.keys(dayData).forEach(cat => {
+                if (cat === currentCategory) return;
+                addShop(dayData[cat]?.shops?.[shop]);
+            });
+        }
+
+        const balance = prevDues + todayBillValue - paid;
+        const balEl = document.getElementById(`balance-${idx}`);
+        const totEl = document.getElementById(`total-${idx}`);
+        const prevEl = document.getElementById(`prev-${idx}`);
+
+        if (prevEl) prevEl.innerText = `₹${prevDues}`;
+        if (totEl) totEl.innerText = `₹${todayBillValue}`;
+        if (balEl) {
+            balEl.innerText = `₹${balance}`;
+            balEl.style.color = balance > 0 ? '#ef4444' : (balance < 0 ? '#f59e0b' : '#10b981');
+        }
+    }
+
     // Updates only the header and class of the shop card (lightweight)
-    function updateShopRowUI(shop) {
+    function updateShopRowUILegacy(shop) {
         const idx = SHOP_LIST.indexOf(shop);
         const dayData = globalDB[selectedDate] || {};
         
         let totalValToday = 0;
-        let totalCashToday = 0;
+        let totalPaidToday = 0;
         let hasActivity = false;
         let shopDriver = null;
 
@@ -1249,8 +1261,8 @@
             const pA = getPrice(shop, 'appam');
             totalValToday += (Number(s.dosa?.sale)||0) * pD + 
                              (Number(s.appam?.sale)||0) * pA;
-            totalCashToday += Number(s.cashReceived) || 0;
-            if(s.dosa?.sale || s.dosa?.cr || s.appam?.sale || s.appam?.cr || s.cashReceived) hasActivity = true;
+            totalPaidToday += getPaymentTotal(s);
+            if(hasShopEntryActivity(s)) hasActivity = true;
             if(s.driver) shopDriver = s.driver;
         });
         
@@ -1265,6 +1277,32 @@
                 card.classList.remove('completed');
                 statusDiv.innerHTML = `Pending<div class="status-dot"></div>`;
             }
+        }
+    }
+
+    function updateShopRowUI(shop) {
+        const idx = SHOP_LIST.indexOf(shop);
+        const dayData = globalDB[selectedDate] || {};
+        let totalPaidToday = 0;
+        let hasActivity = false;
+
+        Object.keys(dayData).forEach(cat => {
+            const s = dayData[cat]?.shops?.[shop];
+            if (!s) return;
+            totalPaidToday += getPaymentTotal(s);
+            if (hasShopEntryActivity(s)) hasActivity = true;
+        });
+
+        const card = document.getElementById(`card-shop-${idx}`);
+        const statusDiv = document.getElementById(`status-shop-${idx}`);
+        if (!card || !statusDiv) return;
+
+        if (hasActivity) {
+            card.classList.add('completed');
+            statusDiv.innerHTML = `<span>₹${totalPaidToday}</span><div class="status-dot"></div>`;
+        } else {
+            card.classList.remove('completed');
+            statusDiv.innerHTML = `Pending<div class="status-dot"></div>`;
         }
     }
 
@@ -1349,7 +1387,7 @@
         sortedShops.forEach(shop => {
             const pastDues = Number(pastDuesCache[shop]) || 0;
             let todaySaleVal = 0;
-            let todayCash = 0;
+            let todayPaid = 0;
             let todayCreditOnly = 0;
             let currentDriverName = null;
 
@@ -1362,12 +1400,12 @@
                 
                 todaySaleVal += ((Number(sd.dosa?.sale)||0) + (Number(sd.dosa?.cr)||0)) * pD + 
                               ((Number(sd.appam?.sale)||0) + (Number(sd.appam?.cr)||0)) * pA;
-                todayCash += Number(sd.cashReceived) || 0;
+                todayPaid += getPaymentTotal(sd);
                 todayCreditOnly += (Number(sd.dosa?.cr)||0) * pD + (Number(sd.appam?.cr)||0) * pA;
                 if(sd.driver) currentDriverName = sd.driver;
             });
 
-            const totalOutstanding = pastDues + todaySaleVal - todayCash;
+            const totalOutstanding = pastDues + todaySaleVal - todayPaid;
 
             // Display logic: Show if they owe money OR if they got credit today
             if(totalOutstanding > 0.1 || todayCreditOnly > 0.1) {
@@ -1480,7 +1518,8 @@
 
          // 1. Preserve Expanded State
          const openStates = {};
-         const DRIVERS = ["Udhayamperoor", "Kakkanad", "Kadavanthra", "Nettor"];
+         const gds = document.getElementById('globalDriverSelect');
+         const DRIVERS = gds ? Array.from(gds.options).map(o => o.value).filter(v => v !== "") : ["Udhayamperoor", "Kakkanad", "Kadavanthra", "Nettor"];
          DRIVERS.forEach(d => {
             const safeName = d.replace(/\s+/g, '');
             const body = document.getElementById(`member-log-${safeName}`);
@@ -1520,13 +1559,13 @@
                     const sd = catShops[shop];
                     if(!sd || sd.driver !== driver) return;
                     
-                    const hasShopActivity = (sd.dosa?.sale || sd.dosa?.cr || sd.appam?.sale || sd.appam?.cr || sd.cashReceived);
+                    const hasShopActivity = hasShopEntryActivity(sd);
                     if(!hasShopActivity) return;
 
                     if(!shopActivity[shop]) shopActivity[shop] = { dosa:0, appam:0, cash:0 };
                     shopActivity[shop].dosa += (Number(sd.dosa?.sale)||0) + (Number(sd.dosa?.cr)||0);
                     shopActivity[shop].appam += (Number(sd.appam?.sale)||0) + (Number(sd.appam?.cr)||0);
-                    shopActivity[shop].cash += (Number(sd.cashReceived)||0);
+                    shopActivity[shop].cash += getPaymentTotal(sd);
                 });
              });
 
@@ -1590,9 +1629,9 @@
 
                          <div style="font-size:11px; color:#64748b">Hubs Assigned: <b>${activeHubs.join(", ") || 'General'}</b></div>
                      ` : `
-                         <div style="text-align:center; padding:30px; color:var(--text-muted); font-size:13px; font-weight:500">
-                             No loads recorded for ${driver} today
-                         </div>
+                         <div style="padding:40px; text-align:center; color:#cbd5e1; font-size:12px; border:1px dashed #e2e8f0; border-radius:12px">
+                            No loads recorded for this route today
+                        </div>
                      `}
                  </div>
              </div>`;
@@ -1638,7 +1677,7 @@
         const searchVal = (searchInput?.value || "").toLowerCase().trim();
         
         if(!filterDriver) {
-            container.innerHTML = `<div class="card" style="border:1px dashed #4f46e5; background:#eef2ff; padding:32px 20px; text-align:center; box-shadow:none; margin-bottom:24px"> Select Driver First... </div>`;
+            container.innerHTML = `<div class="card" style="border:1px dashed #4f46e5; background:#eef2ff; padding:32px 20px; text-align:center; box-shadow:none; margin-bottom:24px"> Select Route First... </div>`;
             return;
         }
         
@@ -1654,7 +1693,7 @@
             if(!matchesSearch) return;
 
             const data = currentData.shops[shop];
-            const hasActivity = (data.dosa.sale || data.dosa.cr || data.appam.sale || data.appam.cr || data.cashReceived);
+            const hasActivity = hasShopEntryActivity(data);
             if(filterDriver && hasActivity && data.driver && data.driver !== filterDriver) return;
             if (!searchVal && !hasActivity) return;
 
@@ -1759,7 +1798,10 @@
         }
 
         SHOP_LIST.forEach((shop, idx) => {
-            if(currentData.shops[shop]) updateShopBalance(shop, idx);
+            if(currentData.shops[shop]) {
+                updateShopRowUI(shop);
+                updateShopBalance(shop, idx);
+            }
         });
     }
 
