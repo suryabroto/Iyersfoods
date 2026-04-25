@@ -261,6 +261,47 @@
         .date-pill span:first-child { display: block; } /* Show date */
         .date-pill span:nth-child(2) { display: none; } /* Hide Icon on small */
     }
+    /* --- ROUTE TRACKER CARDS --- */
+    .rt-card {
+        background: white; border-radius: 14px; border: 1px solid var(--border);
+        margin-bottom: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        transition: all 0.2s;
+    }
+    .rt-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+    .rt-head-rt {
+        padding: 14px 16px; display: flex; justify-content: space-between; align-items: center;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border-bottom: 1px solid var(--border); cursor: pointer;
+    }
+    .rt-head-rt .rt-name { font-weight: 800; font-size: 14px; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+    .rt-head-rt .rt-name .rt-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .rt-head-rt .rt-summary { font-size: 11px; font-weight: 700; color: var(--text-muted); display: flex; gap: 12px; }
+    .rt-head-rt .rt-summary .rt-cash { color: var(--success); }
+    .rt-body-rt { display: none; padding: 0; }
+    .rt-card.rt-open .rt-body-rt { display: block; }
+    .rt-stat-grid {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border-bottom: 1px solid #f1f5f9;
+    }
+    .rt-stat-cell {
+        padding: 12px; text-align: center; border-right: 1px solid #f1f5f9;
+    }
+    .rt-stat-cell:last-child { border-right: none; }
+    .rt-stat-cell .rt-lbl { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .rt-stat-cell .rt-val { font-size: 18px; font-weight: 800; }
+    .rt-detail-row {
+        display: flex; justify-content: space-between; padding: 8px 16px; font-size: 12px;
+        border-bottom: 1px solid #f8fafc;
+    }
+    .rt-detail-row:last-child { border-bottom: none; }
+    .rt-detail-row .rt-detail-lbl { color: var(--text-muted); font-weight: 600; }
+    .rt-detail-row .rt-detail-val { font-weight: 700; }
+    .rt-efficiency {
+        margin: 12px 16px; padding: 10px 16px; border-radius: 10px; display: flex; justify-content: space-between;
+        align-items: center; font-size: 12px; font-weight: 700;
+    }
+    .rt-efficiency.good { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    .rt-efficiency.warn { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+    .rt-efficiency.bad { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 </style>
 </head>
 
@@ -292,7 +333,11 @@
              
              <div class="top-controls">
                  <select id="globalDriverSelect" class="top-select" onchange="setGlobalDriver(this.value)">
-                    <option value="">All Routes</option>
+                    <option value="">Select Route</option>
+                 </select>
+
+                 <select id="globalActualDriverSelect" class="top-select" onchange="setGlobalActualDriver(this.value)">
+                    <option value="">Select Driver</option>
                  </select>
             
                  <div class="date-pill" onclick="openDatePicker()">
@@ -392,6 +437,15 @@
         </div>
     </div>
 
+    <!-- ROUTE PERFORMANCE TRACKER -->
+    <div id="routeTrackerSection" style="margin-top:16px">
+        <div style="font-size:12px; font-weight:900; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; display:flex; align-items:center; gap:8px">
+            <span style="display:inline-block; width:4px; height:16px; background:var(--primary); border-radius:2px"></span>
+            Route Performance Tracker
+        </div>
+        <div id="routeTrackerCards"></div>
+    </div>
+
     <!-- PENDING CREDIT ALERT CARD -->
     <div id="creditCollectionCard" class="card" style="display:none; border:1px solid #fbbf24; background:#fffbeb">
         <div class="card-head" style="background:#fef3c7; color:#92400e; border-bottom:1px solid #fde68a">
@@ -423,6 +477,12 @@
                     <label>Route</label>
                     <select id="tripDriver">
                         <option value="">Select Route...</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Driver Name</label>
+                    <select id="tripActualDriver">
+                        <option value="">Select Driver...</option>
                     </select>
                 </div>
             </div>
@@ -532,6 +592,7 @@
     let selectedDate = "";
     let currentCategory = "PACKET";
     let selectedDriver = "";
+    let selectedActualDriver = "";
     let activeSection = "overview";
     let pastDuesCache = {};
     let unsubscribeSnapshot = null; // Holds the active onSnapshot listener
@@ -900,13 +961,36 @@
                 
                 if(gds) {
                     const current = gds.value;
-                    gds.innerHTML = '<option value="">All Routes</option>' + routes.map(d => `<option>${d}</option>`).join("");
+                    gds.innerHTML = '<option value="">Select Route</option>' + routes.map(d => `<option>${d}</option>`).join("");
                     gds.value = current;
                 }
                 if(tds) {
                     const current = tds.value;
                     tds.innerHTML = '<option value="">Select Route...</option>' + routes.map(d => `<option>${d}</option>`).join("");
                     tds.value = current;
+                }
+            }
+        });
+    }
+
+    function loadStaff() {
+        db.collection("data").doc("staff").onSnapshot((snap) => {
+            if(snap.exists) {
+                const list = snap.data().list || [];
+                const drivers = list.filter(s => s.type === "DELIVERY").map(s => s.name).sort();
+                
+                const gads = document.getElementById('globalActualDriverSelect');
+                const tads = document.getElementById('tripActualDriver');
+                
+                if(gads) {
+                    const current = gads.value;
+                    gads.innerHTML = '<option value="">Select Driver</option>' + drivers.map(d => `<option>${d}</option>`).join("");
+                    gads.value = current;
+                }
+                if(tads) {
+                    const current = tads.value;
+                    tads.innerHTML = '<option value="">Select Driver...</option>' + drivers.map(d => `<option>${d}</option>`).join("");
+                    tads.value = current;
                 }
             }
         });
@@ -935,6 +1019,7 @@
             // Apply listeners and bootup
             loadClients();
             loadRouteMaster();
+            loadStaff();
             
             const dInput = document.getElementById('workDate');
             if(dInput) dInput.value = selectedDate;
@@ -1018,6 +1103,15 @@
         renderCreditAlerts();
     }
 
+    function setGlobalActualDriver(driver) {
+        selectedActualDriver = driver;
+        const sel = document.getElementById('globalActualDriverSelect');
+        if (sel && sel.value !== driver) sel.value = driver;
+        
+        const tripSel = document.getElementById('tripActualDriver');
+        if (tripSel) tripSel.value = driver;
+    }
+
     function openDatePicker() {
         const dInput = document.getElementById('workDate');
         if(dInput) dInput.showPicker();
@@ -1055,20 +1149,24 @@
         const tripDosa = document.getElementById('tripDosa');
         const tripAppam = document.getElementById('tripAppam');
         const tripDriver = document.getElementById('tripDriver');
+        const tripActualDriver = document.getElementById('tripActualDriver');
         const addBtn = document.querySelector('.btn-add-trip');
         if (tripDosa) tripDosa.value = "";
         if (tripAppam) tripAppam.value = "";
         if (tripDriver) tripDriver.value = selectedDriver || "";
+        if (tripActualDriver) tripActualDriver.value = selectedActualDriver || "";
         if (addBtn) addBtn.innerText = "+ Add Trip";
     }
 
     function addTrip() {
         const hub = document.getElementById('activeHub')?.value || "";
         const driver = document.getElementById('tripDriver')?.value || selectedDriver;
+        const actualDriver = document.getElementById('tripActualDriver')?.value || selectedActualDriver;
         const dosa = Number(document.getElementById('tripDosa')?.value) || 0;
         const appam = Number(document.getElementById('tripAppam')?.value) || 0;
 
         if (!driver) return alert("Please select a route before adding stock.");
+        if (!actualDriver) return alert("Please select a driver before adding stock.");
         if (!hub || hub === "ALL") return alert("Please select the source hub before adding stock.");
         if (dosa <= 0 && appam <= 0) return alert("Enter Dosa or Appam quantity.");
 
@@ -1076,9 +1174,9 @@
         const existingId = window.editState.trip;
         if (existingId) {
             const idx = currentData.trips.findIndex(t => t.id === existingId);
-            if (idx !== -1) currentData.trips[idx] = { ...currentData.trips[idx], hub, driver, dosa, appam };
+            if (idx !== -1) currentData.trips[idx] = { ...currentData.trips[idx], hub, driver, actualDriver, dosa, appam };
         } else {
-            currentData.trips.push({ id: generateId(), hub, driver, dosa, appam });
+            currentData.trips.push({ id: generateId(), hub, driver, actualDriver, dosa, appam });
         }
 
         if (driver) setGlobalDriver(driver);
@@ -1094,8 +1192,10 @@
         window.editState.trip = id;
         const activeHub = document.getElementById('activeHub');
         const tripDriver = document.getElementById('tripDriver');
+        const tripActualDriver = document.getElementById('tripActualDriver');
         if (activeHub) activeHub.value = trip.hub || "Nettor";
         if (tripDriver) tripDriver.value = trip.driver || "";
+        if (tripActualDriver) tripActualDriver.value = trip.actualDriver || "";
         document.getElementById('tripDosa').value = trip.dosa || "";
         document.getElementById('tripAppam').value = trip.appam || "";
         const addBtn = document.querySelector('.btn-add-trip');
@@ -1147,64 +1247,6 @@
         refreshDynamicUI();
     }
     
-    function updateShopBalanceLegacy(shop, idx) {
-        const prevDues = getPendingBalance(shop, selectedDate);
-        let todayBillValue = 0;
-        let cashRec = 0;
-        let gpayRec = 0;
-
-        const pD = getPrice(shop, 'dosa');
-        const pA = getPrice(shop, 'appam');
-
-        // ALWAYS read the ACTIVE category from the live in-memory currentData.
-        // This prevents a stale Firestore snapshot from zeroing Today's Sale
-        // the moment a credit/dmg/free field is changed.
-        const sLocal = currentData.shops[shop];
-        if (sLocal) {
-            todayBillValue += ((Number(sLocal.dosa?.sale) || 0) + (Number(sLocal.dosa?.cr) || 0)) * pD +
-                              ((Number(sLocal.appam?.sale) || 0) + (Number(sLocal.appam?.cr) || 0)) * pA;
-            cashRec  += Number(sLocal.cashReceived)  || 0;
-            gpayRec  += Number(sLocal.gpayReceived)  || 0;
-        }
-
-        // For OTHER categories (e.g. LOOSE when currentCategory is PACKET) use globalDB
-        const dayData = globalDB[selectedDate];
-        if (dayData) {
-            Object.keys(dayData).forEach(cat => {
-                if (cat === currentCategory) return; // Already handled above
-                const catObj = dayData[cat];
-                if (!catObj || !catObj.shops) return;
-                const s = catObj.shops[shop];
-                if (!s) return;
-                todayBillValue += ((Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0)) * pD +
-                                  ((Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0)) * pA;
-                cashRec  += Number(s.cashReceived)  || 0;
-                gpayRec  += Number(s.gpayReceived)  || 0;
-            });
-        }
-
-        // Closing Balance = Previous Dues + Today's Sale (sale only) - Payments
-        // Credit is NOT included here — it's tracked in Overview & Tally only
-        const totalTarget = prevDues + todayBillValue;
-        const balance = totalTarget - cashRec - gpayRec;
-        
-        const balEl = document.getElementById(`balance-${idx}`);
-        const totEl = document.getElementById(`total-${idx}`);
-        const prevEl = document.getElementById(`prev-${idx}`);
-        
-        if(prevEl) prevEl.innerText = `₹${prevDues}`;
-        if(balEl) {
-            balEl.innerText = `₹${balance}`;
-            if(balance > 0) {
-                balEl.style.color = '#ef4444';
-            } else if(balance < 0) {
-                balEl.style.color = '#f59e0b';
-            } else {
-                balEl.style.color = '#10b981';
-            }
-        }
-        if(totEl) totEl.innerText = `₹${todaySaleOnly}`;
-    }
     function updateShopBalance(shop, idx) {
         const prevDues = getPendingBalance(shop, selectedDate);
         let todayBillValue = 0;
@@ -1239,44 +1281,6 @@
         if (balEl) {
             balEl.innerText = `₹${balance}`;
             balEl.style.color = balance > 0 ? '#ef4444' : (balance < 0 ? '#f59e0b' : '#10b981');
-        }
-    }
-
-    // Updates only the header and class of the shop card (lightweight)
-    function updateShopRowUILegacy(shop) {
-        const idx = SHOP_LIST.indexOf(shop);
-        const dayData = globalDB[selectedDate] || {};
-        
-        let totalValToday = 0;
-        let totalPaidToday = 0;
-        let hasActivity = false;
-        let shopDriver = null;
-
-        Object.keys(dayData).forEach(cat => {
-            const catObj = dayData[cat];
-            if (!catObj || !catObj.shops) return;
-            const s = catObj.shops[shop];
-            if(!s) return;
-            const pD = getPrice(shop, 'dosa');
-            const pA = getPrice(shop, 'appam');
-            totalValToday += (Number(s.dosa?.sale)||0) * pD + 
-                             (Number(s.appam?.sale)||0) * pA;
-            totalPaidToday += getPaymentTotal(s);
-            if(hasShopEntryActivity(s)) hasActivity = true;
-            if(s.driver) shopDriver = s.driver;
-        });
-        
-        const card = document.getElementById(`card-shop-${idx}`);
-        const statusDiv = document.getElementById(`status-shop-${idx}`);
-        
-        if(card && statusDiv) {
-            if(hasActivity) {
-                card.classList.add('completed');
-                statusDiv.innerHTML = `<span>₹${totalCashToday}</span><div class="status-dot"></div>`;
-            } else {
-                card.classList.remove('completed');
-                statusDiv.innerHTML = `Pending<div class="status-dot"></div>`;
-            }
         }
     }
 
@@ -1335,8 +1339,6 @@
     }
 
     // PRODUCTION-GRADE REFRESH (Fast, doesn't lose focus)
-    // PRODUCTION-GRADE REFRESH (Fast, doesn't lose focus)
-    // PRODUCTION-GRADE REFRESH (Fast, doesn't lose focus)
     function refreshDynamicUI() {
         renderStats();
         renderDeliveryMemberLogs();
@@ -1360,8 +1362,6 @@
         });
     }
 
-    // (updateExpense and updateExtraIncome are defined later with correct multi-arg signatures)
-    
     function renderCreditAlerts() {
         const container = document.getElementById('creditCollectionList');
         const card = document.getElementById('creditCollectionCard');
@@ -1488,6 +1488,101 @@
 
         // TOTAL CASH COLLECTOR (Aggregated actual cash received)
         updateEl('uiTotalCash', `₹${stats.totalCashCollected}`);
+
+        renderRouteTracker();
+    }
+
+    function toggleRouteTracker(id) {
+        const el = document.getElementById(id);
+        if(el) el.classList.toggle('rt-open');
+    }
+
+    function renderRouteTracker() {
+        const container = document.getElementById('routeTrackerCards');
+        if(!container) return;
+        const dayData = globalDB[selectedDate] || {};
+        const gds = document.getElementById('globalDriverSelect');
+        const ALL_ROUTES = gds ? Array.from(gds.options).map(o => o.value).filter(v => v !== "") : [];
+        const driverStats = {};
+        ALL_ROUTES.forEach(route => { driverStats[route] = { dosa:{taken:0,sold:0,credit:0,free:0,dmg:0}, appam:{taken:0,sold:0,credit:0,free:0,dmg:0}, cash:0, gpay:0, shopCount:0, hubs:new Set() }; });
+        const catsToScan = Object.keys(dayData).filter(k => k==='PACKET'||k==='LOOSE');
+        catsToScan.forEach(cat => {
+            const catData = dayData[cat]; if(!catData) return;
+            (catData.trips||[]).forEach(t => {
+                if(!t.driver) return;
+                if(!driverStats[t.driver]) driverStats[t.driver] = { dosa:{taken:0,sold:0,credit:0,free:0,dmg:0}, appam:{taken:0,sold:0,credit:0,free:0,dmg:0}, cash:0, gpay:0, shopCount:0, hubs:new Set() };
+                driverStats[t.driver].dosa.taken += Number(t.dosa)||0;
+                driverStats[t.driver].appam.taken += Number(t.appam)||0;
+                if(t.hub) driverStats[t.driver].hubs.add(t.hub);
+            });
+            const shops = catData.shops||{};
+            Object.keys(shops).forEach(shopName => {
+                const s = shops[shopName]; if(!s||!s.driver) return;
+                if(!driverStats[s.driver]) driverStats[s.driver] = { dosa:{taken:0,sold:0,credit:0,free:0,dmg:0}, appam:{taken:0,sold:0,credit:0,free:0,dmg:0}, cash:0, gpay:0, shopCount:0, hubs:new Set() };
+                const ds = driverStats[s.driver];
+                ds.dosa.sold += Number(s.dosa?.sale)||0; ds.dosa.credit += Number(s.dosa?.cr)||0; ds.dosa.free += Number(s.dosa?.free)||0; ds.dosa.dmg += Number(s.dosa?.dmg)||0;
+                ds.appam.sold += Number(s.appam?.sale)||0; ds.appam.credit += Number(s.appam?.cr)||0; ds.appam.free += Number(s.appam?.free)||0; ds.appam.dmg += Number(s.appam?.dmg)||0;
+                ds.cash += Number(s.cashReceived)||0; ds.gpay += Number(s.gpayReceived)||0;
+                if(hasShopEntryActivity(s)) ds.shopCount++;
+            });
+        });
+        const openStates = {};
+        container.querySelectorAll('.rt-card.rt-open').forEach(el => { openStates[el.dataset.route] = true; });
+        const routesToShow = selectedDriver ? Object.keys(driverStats).filter(d => d===selectedDriver) : Object.keys(driverStats).sort();
+        let html = '';
+        routesToShow.forEach(route => {
+            const ds = driverStats[route];
+            const totalTaken = ds.dosa.taken + ds.appam.taken;
+            const totalDist = ds.dosa.sold+ds.dosa.credit+ds.dosa.free+ds.dosa.dmg+ds.appam.sold+ds.appam.credit+ds.appam.free+ds.appam.dmg;
+            const totalSold = ds.dosa.sold+ds.appam.sold;
+            const totalFree = ds.dosa.free+ds.appam.free;
+            const totalDmg = ds.dosa.dmg+ds.appam.dmg;
+            const totalLoss = totalFree+totalDmg;
+            const balance = totalTaken - totalDist;
+            const totalColl = ds.cash + ds.gpay;
+            if(totalTaken===0 && totalDist===0 && totalColl===0) return;
+            const eff = totalTaken>0 ? Math.round((totalSold/totalTaken)*100) : 0;
+            const effCls = eff>=80?'good':(eff>=50?'warn':'bad');
+            const dotClr = totalTaken>0?(balance===0?'#10b981':(balance<0?'#ef4444':'#f59e0b')):'#cbd5e1';
+            const isOpen = openStates[route]?'rt-open':'';
+            const sid = route.replace(/\s+/g,'');
+            const dR = ds.dosa.taken-ds.dosa.sold-ds.dosa.credit-ds.dosa.free-ds.dosa.dmg;
+            const aR = ds.appam.taken-ds.appam.sold-ds.appam.credit-ds.appam.free-ds.appam.dmg;
+            html += '<div class="rt-card '+isOpen+'" data-route="'+route+'" id="rt-card-'+sid+'">'
+            +'<div class="rt-head-rt" onclick="toggleRouteTracker(\'rt-card-'+sid+'\')">'
+            +'<div class="rt-name"><div class="rt-dot" style="background:'+dotClr+'"></div>'+route+'</div>'
+            +'<div class="rt-summary"><span>'+totalTaken+' taken</span><span>'+totalSold+' sold</span><span class="rt-cash">\u20B9'+totalColl+'</span></div>'
+            +'</div><div class="rt-body-rt">'
+            +'<div class="rt-stat-grid">'
+            +'<div class="rt-stat-cell"><div class="rt-lbl">Taken</div><div class="rt-val" style="color:#0f172a">'+totalTaken+'</div></div>'
+            +'<div class="rt-stat-cell"><div class="rt-lbl">Sold</div><div class="rt-val" style="color:#10b981">'+totalSold+'</div></div>'
+            +'<div class="rt-stat-cell"><div class="rt-lbl">Balance</div><div class="rt-val" style="color:'+(balance>0?'#f59e0b':(balance<0?'#ef4444':'#10b981'))+'">'+balance+'</div></div>'
+            +'</div>'
+            +'<div style="padding:4px 0;background:#fafafa"><div style="padding:6px 16px;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">Dosa Breakdown</div>'
+            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Taken</span><span class="rt-detail-val" style="color:#0f172a">'+ds.dosa.taken+'</span></div>'
+            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Sold (Cash)</span><span class="rt-detail-val" style="color:#10b981">'+ds.dosa.sold+'</span></div>'
+            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Credit</span><span class="rt-detail-val" style="color:#f59e0b">'+ds.dosa.credit+'</span></div>'
+            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Free</span><span class="rt-detail-val" style="color:#3b82f6">'+ds.dosa.free+'</span></div>'
+            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Damage</span><span class="rt-detail-val" style="color:#ef4444">'+ds.dosa.dmg+'</span></div>'
+            +'<div class="rt-detail-row" style="background:#f1f5f9"><span class="rt-detail-lbl" style="font-weight:800;color:#334155">Remaining</span><span class="rt-detail-val" style="color:'+(dR<0?'#ef4444':'#166534')+'">'+dR+'</span></div></div>'
+            +'<div style="padding:4px 0;background:#fff"><div style="padding:6px 16px;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">Appam Breakdown</div>'
+            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Taken</span><span class="rt-detail-val" style="color:#0f172a">'+ds.appam.taken+'</span></div>'
+            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Sold (Cash)</span><span class="rt-detail-val" style="color:#10b981">'+ds.appam.sold+'</span></div>'
+            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Credit</span><span class="rt-detail-val" style="color:#f59e0b">'+ds.appam.credit+'</span></div>'
+            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Free</span><span class="rt-detail-val" style="color:#3b82f6">'+ds.appam.free+'</span></div>'
+            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Damage</span><span class="rt-detail-val" style="color:#ef4444">'+ds.appam.dmg+'</span></div>'
+            +'<div class="rt-detail-row" style="background:#f1f5f9"><span class="rt-detail-lbl" style="font-weight:800;color:#334155">Remaining</span><span class="rt-detail-val" style="color:'+(aR<0?'#ef4444':'#166534')+'">'+aR+'</span></div></div>'
+            +'<div style="padding:12px 16px;background:#f8fafc;border-top:1px solid #e2e8f0">'
+            +'<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:#64748b">Cash Collected</span><span style="font-size:13px;font-weight:800;color:#10b981">\u20B9'+ds.cash+'</span></div>'
+            +'<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:#64748b">GPay Collected</span><span style="font-size:13px;font-weight:800;color:#4f46e5">\u20B9'+ds.gpay+'</span></div>'
+            +'<div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px dashed #cbd5e1"><span style="font-size:11px;font-weight:800;color:#334155">TOTAL COLLECTION</span><span style="font-size:14px;font-weight:900;color:#0f172a">\u20B9'+totalColl+'</span></div></div>'
+            +(totalLoss>0?'<div style="padding:8px 16px;background:#fef2f2;border-top:1px solid #fecaca;display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:700;color:#991b1b">Total Loss (Free+Damage)</span><span style="font-size:14px;font-weight:800;color:#ef4444">'+totalLoss+' packets</span></div>':'')
+            +'<div class="rt-efficiency '+effCls+'"><span>Sell-Through Rate</span><span style="font-size:16px;font-weight:900">'+eff+'%</span></div>'
+            +'<div style="padding:8px 16px 12px;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between"><span>Shops: <b style="color:#0f172a">'+ds.shopCount+'</b></span><span>Hubs: <b style="color:#0f172a">'+(Array.from(ds.hubs).join(', ')||'N/A')+'</b></span></div>'
+            +'</div></div>';
+        });
+        if(!html) html = '<div style="text-align:center;padding:24px;color:#94a3b8;font-size:12px;background:#f8fafc;border-radius:12px;border:1px dashed #cbd5e1">No route activity recorded today</div>';
+        container.innerHTML = html;
     }
 
     function renderLogs() {
@@ -1506,7 +1601,7 @@
          tLog.innerHTML = "";
          if (fTrips.length > 0) { 
              document.getElementById('tripLogContainer').style.display = "block"; 
-             fTrips.forEach(t => tLog.innerHTML += `<tr><td><span class="badge" style="background:#f1f5f9;color:#64748b">${t.hub.slice(0,3)}</span></td><td>${t.driver}</td><td style="text-align:right">${t.dosa}</td><td style="text-align:right">${t.appam}</td><td style="text-align:right"><button class="btn-del" style="background:#e0f2fe; color:#0369a1; margin-right:4px" onclick="editTrip('${t.id}')">✎</button><button class="btn-del" onclick="deleteTrip('${t.id}')">×</button></td></tr>`); 
+             fTrips.forEach(t => tLog.innerHTML += `<tr><td><span class="badge" style="background:#f1f5f9;color:#64748b">${t.hub.slice(0,3)}</span></td><td>${t.driver}<br><small style="color:var(--text-muted)">${t.actualDriver || 'N/A'}</small></td><td style="text-align:right">${t.dosa}</td><td style="text-align:right">${t.appam}</td><td style="text-align:right"><button class="btn-del" style="background:#e0f2fe; color:#0369a1; margin-right:4px" onclick="editTrip('${t.id}')">✎</button><button class="btn-del" onclick="deleteTrip('${t.id}')">×</button></td></tr>`); 
          } else { 
              document.getElementById('tripLogContainer').style.display = "none"; 
          }
@@ -2073,8 +2168,6 @@
 
         return stats;
     }
-
-    /* REMOVED updateManualTallyField as it is now auto-calculated */
     
     function updateTallyReconciliationUI() {
         // Recalculate everything
