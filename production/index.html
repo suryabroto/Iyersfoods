@@ -216,6 +216,32 @@
     body { background-color: var(--bg-body); color: var(--text-main); font-size: 14px; padding-bottom: 0; }
     .container { max-width: 1000px; margin: 0 auto; padding: 0; }
     header { display: none; } /* Hide old header */
+
+    /* --- PREMIUM ERROR MODAL --- */
+    .error-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        display: none; justify-content: center; align-items: center; z-index: 9999;
+        opacity: 0; transition: opacity 0.3s ease;
+    }
+    .error-overlay.show { display: flex; opacity: 1; }
+    .error-modal {
+        background: white; width: 90%; max-width: 400px; border-radius: 24px; padding: 32px;
+        text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        transform: translateY(20px); transition: transform 0.3s ease;
+    }
+    .error-overlay.show .error-modal { transform: translateY(0); }
+    .error-icon-box {
+        width: 80px; height: 80px; background: #fee2e2; border-radius: 24px;
+        display: flex; align-items: center; justify-content: center; font-size: 40px;
+        margin: 0 auto 20px; color: #ef4444; border: 4px solid #fecaca;
+    }
+    .error-title { font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 12px; }
+    .error-desc { font-size: 14px; color: #64748b; line-height: 1.6; margin-bottom: 24px; }
+    .btn-close-error { 
+        background: var(--accent-gradient); color: white; border: none; height: 48px;
+        border-radius: 14px; font-weight: 700; font-size: 14px; width: 100%; cursor: pointer;
+    }
 </style>
 </head>
 
@@ -238,9 +264,6 @@
             </li>
             <li class="nav-item" onclick="switchSection('declaration')">
                 <span class="nav-icon">📋</span> Daily Declaration
-            </li>
-            <li class="nav-item" onclick="switchSection('performance')">
-                <span class="nav-icon">📈</span> Performance
             </li>
         </ul>
     </nav>
@@ -320,7 +343,7 @@
                     <div class="form-group"><label>Staff Member</label><select id="activeStaff"></select></div>
                     <div class="form-group" id="prodClientWrapper" style="display:none">
                         <label>Client</label>
-                        <input type="text" id="prodClient" list="clientOptions" placeholder="Type to search client...">
+                        <input type="text" id="prodClient" list="clientOptions" placeholder="Type to search client..." onchange="handleClientInput(event)">
                     </div>
                     <div class="form-group"><label>Quantity Produced (L)</label><input type="number" id="prodQty" placeholder="0"></div>
                     
@@ -370,7 +393,7 @@
                     <div class="form-group"><label>Driver</label><select id="delStaff"><option>Anand</option><option>Renjith</option><option>Aswin</option><option>Sanja</option><option>Retail</option><option>kannankulangara</option><option>vadakkekotta</option></select></div>
                     <div class="form-group" id="delClientWrapper" style="display:none">
                         <label>Client</label>
-                        <input type="text" id="delClient" list="clientOptions" placeholder="Type to search client...">
+                        <input type="text" id="delClient" list="clientOptions" placeholder="Type to search client..." onchange="handleClientInput(event)">
                     </div>
                     <div class="form-group"><label>Quantity Dispatched (L)</label><input type="number" id="delQty" placeholder="0"></div>
                     
@@ -433,7 +456,7 @@
                     
                     <div class="form-group" id="retClientWrapper">
                         <label>Client</label>
-                        <input type="text" id="retClient" list="clientOptions" placeholder="Type to search client...">
+                        <input type="text" id="retClient" list="clientOptions" placeholder="Type to search client..." onchange="handleClientInput(event)">
                     </div>
                     
                     <div class="form-group"><label>Quantity (L)</label><input type="number" id="retQty" placeholder="0"></div>
@@ -485,29 +508,6 @@
                 </div>
             </section>
 
-            <!-- PERFORMANCE SECTION -->
-            <section id="performance" class="content-section">
-                <div class="card">
-                    <h3>Staff Performance</h3>
-                    <div class="staff-chips" id="staffGrid"></div>
-                    <div id="staffDetailsCard" style="display:none; margin-top:20px; background: #f8fafc; padding:16px; border-radius:12px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
-                            <h4 id="sdName">Name</h4><span class="badge" style="background:#e0f2fe; color:#0284c7" id="sdProduct">PROD</span>
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px">
-                            <div style="background:white; padding:12px; border-radius:8px; text-align:center; border:1px solid var(--border)">
-                                <div style="font-size:10px; color:var(--text-muted)">BATCHES</div>
-                                <div id="sdBatches" style="font-size:18px; font-weight:700">0</div>
-                            </div>
-                            <div style="background:white; padding:12px; border-radius:8px; text-align:center; border:1px solid var(--border)">
-                                <div style="font-size:10px; color:var(--text-muted)">TOTAL VOLUME</div>
-                                <div id="sdVolume" style="font-size:18px; font-weight:700">0</div>
-                            </div>
-                        </div>
-                        <div id="sdList" style="font-size:13px; color:var(--text-main)"></div>
-                    </div>
-                </div>
-            </section>
 
         </div> <!-- End of Container -->
     </main>
@@ -517,13 +517,19 @@
     &copy; 2025 IyersFood ERP v3.3
 </footer>
 
-<style>
-@media (max-width: 1024px) {
-    #mainFooter { margin-left: 0; }
-}
-</style>
-
 <datalist id="clientOptions"></datalist>
+
+<!-- ACCESS DENIED MODAL -->
+<div class="error-overlay" id="errorOverlay">
+    <div class="error-modal">
+        <div class="error-icon-box">🛡️</div>
+        <div class="error-title">Access Denied</div>
+        <div class="error-desc" id="errorDesc">
+            The client <b>'Unknown'</b> is not in the register. Only owners can add new clients.
+        </div>
+        <button class="btn-close-error" onclick="closeErrorModal()">I Understand</button>
+    </div>
+</div>
 
 <script type="module">
 import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../firebase-config.js";
@@ -531,12 +537,13 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
 /* --- CONFIG --- */
 const SHOPS = ["Nettor", "Kannankulangara", "Vadakkekotta"];
 let STAFF = { Nettor:[], Kannankulangara:[], Vadakkekotta:[] };
-const DB_KEY = "IYERSFOOD_ERP_V3_3"; 
-const CLIENT_DB_KEY = "IYERS_CLIENT_DB_V2";
+const DB_KEY = "IYERSFOOD_ERP_V4_0"; 
+const CLIENT_DB_KEY = "IYERS_CLIENT_DB_V4";
 const empty = `<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;font-size:12px;">No records for this selection</td></tr>`;
 
 /* --- STATE --- */
 let erpData = {};
+let registeredClients = []; // Store list of registered clients for validation
 let currentDate = "";
 let currentProduct = "DOSA";
 let currentCategory = "PACKET";
@@ -628,13 +635,12 @@ function initApp() {
     
     loadClients();
     loadStaff();
-    initStaffGrid();
     setCategory(currentCategory);
     switchSection('production'); 
 }
 
 function loadStaff() {
-    onSnapshot(doc(db, "data", "staff"), (snapshot) => {
+    onSnapshot(doc(db, "data", "staff_v4"), (snapshot) => {
         if(snapshot.exists()) {
             const list = snapshot.data().list || [];
             // Group by role
@@ -683,7 +689,7 @@ function syncWindow() {
         setCategory, getBatchKey, getCurrentBatchCode, handleManualBatchChange,
         handleFinishBatch, setProductContext, syncShopUI, syncDecUI,
         handleAddProduction, handleAddDelivery, handleAddReturn, handleSubmitDec,
-        editItem, deleteItem, cancelEditMode, initStaffGrid, showStaffStats, render,
+        editItem, deleteItem, cancelEditMode, render,
         editProd: (id) => editItem('PROD', id), deleteProd: (id) => deleteItem('PROD', id),
         editDel: (id) => editItem('DEL', id), deleteDel: (id) => deleteItem('DEL', id),
         editDec: (id) => editItem('DEC', id), deleteDec: (id) => deleteItem('DEC', id),
@@ -693,29 +699,73 @@ function syncWindow() {
 syncWindow();
 
 function loadClients() {
-    const docRef = doc(db, "data", "clients");
+    const docRef = doc(db, "data", "clients_v4");
     onSnapshot(docRef, (snapshot) => {
         if(!snapshot.exists()) return;
         const list = snapshot.data().list || [];
         const dl = document.getElementById('clientOptions');
         if(!dl) return;
         
-        const clients = list.map(c => typeof c === 'string' ? c : c.name).sort();
-        dl.innerHTML = clients.map(c => `<option value="${c}">`).join("");
+        registeredClients = list.map(c => typeof c === 'string' ? c : c.name).sort();
+        dl.innerHTML = registeredClients.map(c => `<option value="${c}">`).join("");
     });
 
     // Initial check/migration
     getDoc(docRef).then((snapshot) => {
         if(!snapshot.exists()) {
             const rawC = localStorage.getItem(CLIENT_DB_KEY);
-            if(rawC) setDoc(docRef, { list: JSON.parse(rawC) });
+            if(rawC) {
+                const list = JSON.parse(rawC);
+                registeredClients = list.map(c => typeof c === 'string' ? c : c.name).sort();
+                setDoc(docRef, { list: list });
+            }
         }
     });
 }
 
+function validateClient(name) {
+    if(!name) return false;
+    return registeredClients.includes(name);
+}
+
+function showAccessDenied(clientName, inputId = null) {
+    const overlay = document.getElementById('errorOverlay');
+    const desc = document.getElementById('errorDesc');
+    desc.innerHTML = `The client <b>'${clientName}'</b> is not in the official register.<br><br>Only the <b>Owner</b> can add new records. Please select an existing client from the list or contact your supervisor.`;
+    
+    overlay.style.display = 'flex';
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    if (inputId) {
+        const el = document.getElementById(inputId);
+        if (el) el.value = ""; // Clear the invalid input to "lock" it
+    }
+}
+
+function closeErrorModal() {
+    const overlay = document.getElementById('errorOverlay');
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.style.display = 'none', 300);
+}
+
+function handleClientInput(e) {
+    const val = e.target.value;
+    if (!val) return;
+    
+    // Use a small delay to allow datalist selection to register
+    setTimeout(() => {
+        if (!validateClient(e.target.value)) {
+            showAccessDenied(e.target.value, e.target.id);
+        }
+    }, 100);
+}
+
+window.closeErrorModal = closeErrorModal;
+window.handleClientInput = handleClientInput;
+
 /* --- DATA HANDLING --- */
 function loadDataFromStorage() {
-    const docRef = doc(db, "data", "erp");
+    const docRef = doc(db, "data", "erp_v4");
     onSnapshot(docRef, (snapshot) => {
         if(!snapshot.exists()) return;
         const data = snapshot.data();
@@ -745,7 +795,7 @@ function loadDataFromStorage() {
 }
 function saveData() { 
     if(!db) return console.error("DB not initialized");
-    setDoc(doc(db, "data", "erp"), erpData)
+    setDoc(doc(db, "data", "erp_v4"), erpData)
         .then(() => console.log("Firestore save success"))
         .catch(err => {
             console.error("Firestore save failed:", err);
@@ -1032,6 +1082,11 @@ function handleAddProduction() {
         const cEl = document.getElementById('prodClient');
         if(cEl && cEl.value) client = cEl.value;
         if(!client) return alert("Please select a Client for Loose production.");
+        
+        // IMMUTABILITY: Validate against registered clients
+        if(!validateClient(client)) {
+            return showAccessDenied(client, 'prodClient');
+        }
     }
 
     const day = erpData[currentDate];
@@ -1063,6 +1118,9 @@ function handleAddDelivery() {
     if(type === 'LOOSE') {
          const cEl = document.getElementById('delClient');
          if(cEl && cEl.value) client = cEl.value;
+         if(client && !validateClient(client)) {
+            return showAccessDenied(client, 'delClient');
+         }
     }
 
     if(editState.del) {
@@ -1088,6 +1146,11 @@ function handleAddReturn() {
     
     // Client is optional for Packet but encouraged, mandatory for Loose if user prefers
     if(type === 'LOOSE' && !client) return alert("Please select a Client for Loose items");
+    
+    // IMMUTABILITY: Validate against registered clients if name is provided
+    if(client && !validateClient(client)) {
+        return showAccessDenied(client, 'retClient');
+    }
     
     const day = erpData[currentDate];
 
@@ -1228,62 +1291,6 @@ function cancelEditMode(type) {
         decCount.value=""; 
         document.getElementById('decAbsent').checked = false;
     }
-}
-
-/* --- STAFF GRID --- */
-function initStaffGrid() {
-    const grid = document.getElementById('staffGrid'); grid.innerHTML = "";
-    let all = []; Object.values(STAFF).forEach(arr => all.push(...arr));
-    [...new Set(all)].forEach(name => {
-        grid.innerHTML += `<div class="chip" onclick="showStaffStats('${name}', this)">${name}</div>`;
-    });
-}
-function showStaffStats(name, el) {
-    document.querySelectorAll('.chip').forEach(b => b.classList.remove('active')); 
-    if(el) el.classList.add('active');
-    
-    const day = erpData[currentDate];
-    // COMBINED: Filter by Staff & Product ONLY (Combine Packet + Loose)
-    const prods = day.productions.filter(p => p.staff === name && p.product === currentProduct);
-    
-    // Group by Batch
-    const batchSummary = {};
-    prods.forEach(p => {
-        if(!batchSummary[p.bn]) batchSummary[p.bn] = 0;
-        batchSummary[p.bn] += p.qty;
-    });
-    
-    const uniqueBatches = Object.keys(batchSummary).sort();
-    const totalVolume = Object.values(batchSummary).reduce((a, b) => a + b, 0);
-
-    document.getElementById('sdName').innerText = name; 
-    document.getElementById('sdProduct').innerText = currentProduct;
-    document.getElementById('sdBatches').innerText = uniqueBatches.length;
-    document.getElementById('sdVolume').innerText = totalVolume + " L";
-    
-    const list = document.getElementById('sdList'); 
-    list.innerHTML = "";
-    
-    if(uniqueBatches.length === 0) {
-        list.innerHTML = `<div style="text-align:center;color:#94a3b8;padding:10px">No data</div>`;
-    } else {
-        uniqueBatches.forEach(bn => {
-            const batchItems = prods.filter(p => p.bn === bn);
-            const qty = batchItems.reduce((a, b) => a + (b.qty || 0), 0);
-            const clients = [...new Set(batchItems.filter(p => p.type === 'LOOSE').map(p => p.client))].join(", ");
-            const bClr = getBatchColor(bn);
-            
-            list.innerHTML += `
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px dashed #e2e8f0">
-                    <div>
-                        <span class="badge" style="background:${bClr.bg}; color:${bClr.text}; font-size:11px">${bn}</span>
-                        ${clients ? `<div style="font-size:10px; color:#64748b; margin-top:2px">${clients}</div>` : ''}
-                    </div>
-                    <strong style="font-size:14px">${qty} L</strong>
-                </div>`;
-        });
-    }
-    document.getElementById('staffDetailsCard').style.display = 'block';
 }
 
 /* --- RENDER --- */
@@ -1482,8 +1489,6 @@ function render() {
         });
     }
     if(pLog.innerHTML==="") pLog.innerHTML=empty; if(dLog.innerHTML==="") dLog.innerHTML=empty; if(rLog.innerHTML==="") rLog.innerHTML=empty; if(dcLog.innerHTML==="") dcLog.innerHTML=empty;
-
-    const ac = document.querySelector('.chip.active'); if(ac) showStaffStats(ac.innerText, ac);
 }
 </script>
 </body>
