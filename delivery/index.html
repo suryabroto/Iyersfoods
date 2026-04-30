@@ -437,14 +437,6 @@
         </div>
     </div>
 
-    <!-- ROUTE PERFORMANCE TRACKER -->
-    <div id="routeTrackerSection" style="margin-top:16px">
-        <div style="font-size:12px; font-weight:900; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; display:flex; align-items:center; gap:8px">
-            <span style="display:inline-block; width:4px; height:16px; background:var(--primary); border-radius:2px"></span>
-            Route Performance Tracker
-        </div>
-        <div id="routeTrackerCards"></div>
-    </div>
 
     <!-- PENDING CREDIT ALERT CARD -->
     <div id="creditCollectionCard" class="card" style="display:none; border:1px solid #fbbf24; background:#fffbeb">
@@ -774,7 +766,7 @@
         }
 
         // Step 2: Real-time listener
-        db.collection("data").doc("clients").onSnapshot((snap) => {
+        db.collection("data").doc("clients_v4").onSnapshot((snap) => {
             if (snap.exists) {
                 const clients = snap.data().list || [];
                 updateClientState(clients);
@@ -974,7 +966,7 @@
     }
 
     function loadStaff() {
-        db.collection("data").doc("staff").onSnapshot((snap) => {
+        db.collection("data").doc("staff_v4").onSnapshot((snap) => {
             if(snap.exists) {
                 const list = snap.data().list || [];
                 const drivers = list.filter(s => s.type === "DELIVERY").map(s => s.name).sort();
@@ -1489,101 +1481,8 @@
         // TOTAL CASH COLLECTOR (Aggregated actual cash received)
         updateEl('uiTotalCash', `₹${stats.totalCashCollected}`);
 
-        renderRouteTracker();
     }
 
-    function toggleRouteTracker(id) {
-        const el = document.getElementById(id);
-        if(el) el.classList.toggle('rt-open');
-    }
-
-    function renderRouteTracker() {
-        const container = document.getElementById('routeTrackerCards');
-        if(!container) return;
-        const dayData = globalDB[selectedDate] || {};
-        const gds = document.getElementById('globalDriverSelect');
-        const ALL_ROUTES = gds ? Array.from(gds.options).map(o => o.value).filter(v => v !== "") : [];
-        const driverStats = {};
-        ALL_ROUTES.forEach(route => { driverStats[route] = { dosa:{taken:0,sold:0,credit:0,free:0,dmg:0}, appam:{taken:0,sold:0,credit:0,free:0,dmg:0}, cash:0, gpay:0, shopCount:0, hubs:new Set() }; });
-        const catsToScan = Object.keys(dayData).filter(k => k==='PACKET'||k==='LOOSE');
-        catsToScan.forEach(cat => {
-            const catData = dayData[cat]; if(!catData) return;
-            (catData.trips||[]).forEach(t => {
-                if(!t.driver) return;
-                if(!driverStats[t.driver]) driverStats[t.driver] = { dosa:{taken:0,sold:0,credit:0,free:0,dmg:0}, appam:{taken:0,sold:0,credit:0,free:0,dmg:0}, cash:0, gpay:0, shopCount:0, hubs:new Set() };
-                driverStats[t.driver].dosa.taken += Number(t.dosa)||0;
-                driverStats[t.driver].appam.taken += Number(t.appam)||0;
-                if(t.hub) driverStats[t.driver].hubs.add(t.hub);
-            });
-            const shops = catData.shops||{};
-            Object.keys(shops).forEach(shopName => {
-                const s = shops[shopName]; if(!s||!s.driver) return;
-                if(!driverStats[s.driver]) driverStats[s.driver] = { dosa:{taken:0,sold:0,credit:0,free:0,dmg:0}, appam:{taken:0,sold:0,credit:0,free:0,dmg:0}, cash:0, gpay:0, shopCount:0, hubs:new Set() };
-                const ds = driverStats[s.driver];
-                ds.dosa.sold += Number(s.dosa?.sale)||0; ds.dosa.credit += Number(s.dosa?.cr)||0; ds.dosa.free += Number(s.dosa?.free)||0; ds.dosa.dmg += Number(s.dosa?.dmg)||0;
-                ds.appam.sold += Number(s.appam?.sale)||0; ds.appam.credit += Number(s.appam?.cr)||0; ds.appam.free += Number(s.appam?.free)||0; ds.appam.dmg += Number(s.appam?.dmg)||0;
-                ds.cash += Number(s.cashReceived)||0; ds.gpay += Number(s.gpayReceived)||0;
-                if(hasShopEntryActivity(s)) ds.shopCount++;
-            });
-        });
-        const openStates = {};
-        container.querySelectorAll('.rt-card.rt-open').forEach(el => { openStates[el.dataset.route] = true; });
-        const routesToShow = selectedDriver ? Object.keys(driverStats).filter(d => d===selectedDriver) : Object.keys(driverStats).sort();
-        let html = '';
-        routesToShow.forEach(route => {
-            const ds = driverStats[route];
-            const totalTaken = ds.dosa.taken + ds.appam.taken;
-            const totalDist = ds.dosa.sold+ds.dosa.credit+ds.dosa.free+ds.dosa.dmg+ds.appam.sold+ds.appam.credit+ds.appam.free+ds.appam.dmg;
-            const totalSold = ds.dosa.sold+ds.appam.sold;
-            const totalFree = ds.dosa.free+ds.appam.free;
-            const totalDmg = ds.dosa.dmg+ds.appam.dmg;
-            const totalLoss = totalFree+totalDmg;
-            const balance = totalTaken - totalDist;
-            const totalColl = ds.cash + ds.gpay;
-            if(totalTaken===0 && totalDist===0 && totalColl===0) return;
-            const eff = totalTaken>0 ? Math.round((totalSold/totalTaken)*100) : 0;
-            const effCls = eff>=80?'good':(eff>=50?'warn':'bad');
-            const dotClr = totalTaken>0?(balance===0?'#10b981':(balance<0?'#ef4444':'#f59e0b')):'#cbd5e1';
-            const isOpen = openStates[route]?'rt-open':'';
-            const sid = route.replace(/\s+/g,'');
-            const dR = ds.dosa.taken-ds.dosa.sold-ds.dosa.credit-ds.dosa.free-ds.dosa.dmg;
-            const aR = ds.appam.taken-ds.appam.sold-ds.appam.credit-ds.appam.free-ds.appam.dmg;
-            html += '<div class="rt-card '+isOpen+'" data-route="'+route+'" id="rt-card-'+sid+'">'
-            +'<div class="rt-head-rt" onclick="toggleRouteTracker(\'rt-card-'+sid+'\')">'
-            +'<div class="rt-name"><div class="rt-dot" style="background:'+dotClr+'"></div>'+route+'</div>'
-            +'<div class="rt-summary"><span>'+totalTaken+' taken</span><span>'+totalSold+' sold</span><span class="rt-cash">\u20B9'+totalColl+'</span></div>'
-            +'</div><div class="rt-body-rt">'
-            +'<div class="rt-stat-grid">'
-            +'<div class="rt-stat-cell"><div class="rt-lbl">Taken</div><div class="rt-val" style="color:#0f172a">'+totalTaken+'</div></div>'
-            +'<div class="rt-stat-cell"><div class="rt-lbl">Sold</div><div class="rt-val" style="color:#10b981">'+totalSold+'</div></div>'
-            +'<div class="rt-stat-cell"><div class="rt-lbl">Balance</div><div class="rt-val" style="color:'+(balance>0?'#f59e0b':(balance<0?'#ef4444':'#10b981'))+'">'+balance+'</div></div>'
-            +'</div>'
-            +'<div style="padding:4px 0;background:#fafafa"><div style="padding:6px 16px;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">Dosa Breakdown</div>'
-            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Taken</span><span class="rt-detail-val" style="color:#0f172a">'+ds.dosa.taken+'</span></div>'
-            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Sold (Cash)</span><span class="rt-detail-val" style="color:#10b981">'+ds.dosa.sold+'</span></div>'
-            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Credit</span><span class="rt-detail-val" style="color:#f59e0b">'+ds.dosa.credit+'</span></div>'
-            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Free</span><span class="rt-detail-val" style="color:#3b82f6">'+ds.dosa.free+'</span></div>'
-            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Damage</span><span class="rt-detail-val" style="color:#ef4444">'+ds.dosa.dmg+'</span></div>'
-            +'<div class="rt-detail-row" style="background:#f1f5f9"><span class="rt-detail-lbl" style="font-weight:800;color:#334155">Remaining</span><span class="rt-detail-val" style="color:'+(dR<0?'#ef4444':'#166534')+'">'+dR+'</span></div></div>'
-            +'<div style="padding:4px 0;background:#fff"><div style="padding:6px 16px;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">Appam Breakdown</div>'
-            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Taken</span><span class="rt-detail-val" style="color:#0f172a">'+ds.appam.taken+'</span></div>'
-            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Sold (Cash)</span><span class="rt-detail-val" style="color:#10b981">'+ds.appam.sold+'</span></div>'
-            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Credit</span><span class="rt-detail-val" style="color:#f59e0b">'+ds.appam.credit+'</span></div>'
-            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Free</span><span class="rt-detail-val" style="color:#3b82f6">'+ds.appam.free+'</span></div>'
-            +'<div class="rt-detail-row"><span class="rt-detail-lbl">Damage</span><span class="rt-detail-val" style="color:#ef4444">'+ds.appam.dmg+'</span></div>'
-            +'<div class="rt-detail-row" style="background:#f1f5f9"><span class="rt-detail-lbl" style="font-weight:800;color:#334155">Remaining</span><span class="rt-detail-val" style="color:'+(aR<0?'#ef4444':'#166534')+'">'+aR+'</span></div></div>'
-            +'<div style="padding:12px 16px;background:#f8fafc;border-top:1px solid #e2e8f0">'
-            +'<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:#64748b">Cash Collected</span><span style="font-size:13px;font-weight:800;color:#10b981">\u20B9'+ds.cash+'</span></div>'
-            +'<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:#64748b">GPay Collected</span><span style="font-size:13px;font-weight:800;color:#4f46e5">\u20B9'+ds.gpay+'</span></div>'
-            +'<div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px dashed #cbd5e1"><span style="font-size:11px;font-weight:800;color:#334155">TOTAL COLLECTION</span><span style="font-size:14px;font-weight:900;color:#0f172a">\u20B9'+totalColl+'</span></div></div>'
-            +(totalLoss>0?'<div style="padding:8px 16px;background:#fef2f2;border-top:1px solid #fecaca;display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:700;color:#991b1b">Total Loss (Free+Damage)</span><span style="font-size:14px;font-weight:800;color:#ef4444">'+totalLoss+' packets</span></div>':'')
-            +'<div class="rt-efficiency '+effCls+'"><span>Sell-Through Rate</span><span style="font-size:16px;font-weight:900">'+eff+'%</span></div>'
-            +'<div style="padding:8px 16px 12px;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between"><span>Shops: <b style="color:#0f172a">'+ds.shopCount+'</b></span><span>Hubs: <b style="color:#0f172a">'+(Array.from(ds.hubs).join(', ')||'N/A')+'</b></span></div>'
-            +'</div></div>';
-        });
-        if(!html) html = '<div style="text-align:center;padding:24px;color:#94a3b8;font-size:12px;background:#f8fafc;border-radius:12px;border:1px dashed #cbd5e1">No route activity recorded today</div>';
-        container.innerHTML = html;
-    }
 
     function renderLogs() {
          const activeHubSelect = document.getElementById('activeHub');

@@ -81,50 +81,8 @@
     .d-stat-lbl { font-size: 10px; color: var(--text-light); text-transform: uppercase; }
     .d-stat-val { font-size: 16px; font-weight: 700; }
     
-    /* --- PRODUCTION ENHANCEMENTS --- */
-    .prod-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
-    .summary-card { background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-    .summary-card .lbl { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; margin-bottom: 8px; }
-    .summary-card .val { font-size: 24px; font-weight: 800; color: var(--text-dark); }
-    .summary-card.packet { border-left: 4px solid var(--primary); }
-    .summary-card.loose { border-left: 4px solid #f59e0b; }
-    
-    .staff-perf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-top: 24px; margin-bottom: 24px; }
-    .staff-card { background: white; padding: 16px; border-radius: 12px; border: 1px solid var(--border); }
-    .staff-card .name { font-weight: 700; font-size: 14px; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; display: flex; justify-content: space-between; }
-    .staff-stat { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; font-weight: 600; }
-
     .client-list { padding: 12px; max-height: 200px; overflow-y: auto; }
     .client-row { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px dashed var(--border); }
-
-    /* --- TABLE FILTERS --- */
-    .filter-row th { padding: 8px !important; background: #f1f5f9; border-bottom: 2px solid var(--border); }
-    .filter-row input, .filter-row select { 
-        width: 100%; padding: 6px 8px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; outline: none; background: white;
-    }
-    .filter-row input:focus, .filter-row select:focus { border-color: var(--primary); }
-
-    /* --- SALES REPORT STYLES --- */
-    .sales-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-    .sales-card { background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); transition: transform 0.2s; }
-    .sales-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-    .sales-card .lbl { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; }
-    .sales-card .val { font-size: 20px; font-weight: 800; color: var(--text-dark); margin: 8px 0; }
-    .sales-card.highlight { border-top: 4px solid var(--primary); }
-    
-    .report-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
-    .chart-container { background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); height: 350px; }
-    .driver-list-panel { background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
-    .driver-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
-    .driver-row:last-child { border-bottom: none; }
-
-    /* --- SALARY STYLES --- */
-    .salary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-top: 20px; }
-    .salary-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 16px; border-left: 4px solid var(--success); }
-    .salary-card .s-name { font-weight: 800; font-size: 14px; color: var(--text-dark); margin-bottom: 10px; display: flex; justify-content: space-between; }
-    .salary-card .s-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; font-weight: 600; color: var(--text-light); }
-    .salary-card .s-val { color: var(--text-dark); font-weight: 700; }
-    .salary-card .s-total { border-top: 1px dashed #cbd5e1; margin-top: 10px; padding-top: 8px; font-weight: 800; color: var(--success); font-size: 15px; }
 </style>
 </head>
 <body>
@@ -132,215 +90,78 @@
 <div class="sidebar">
     <div class="brand">IyersFood<span>Admin</span></div>
     <div class="nav-list">
-        <div class="nav-item active" onclick="nav('home', this)">Dashboard</div>
-        <div class="nav-item" onclick="nav('prod', this)">Production Master</div>
-        <div class="nav-item" onclick="nav('del', this)">Delivery Reports</div>
-        <div class="nav-item" onclick="nav('client', this)">Client Register</div>
-        <div class="nav-item" onclick="nav('staff', this)">Staff Register</div>
-        <div class="nav-item" onclick="nav('routeMaster', this)">Route Register</div>
-        <div class="nav-item" onclick="nav('sales', this)">Sales Analytics</div>
+        <div class="nav-item active" id="nav-home" onclick="nav('home', this)">Dashboard</div>
+        <div class="nav-item" id="nav-prod" onclick="nav('prod', this)">Production Master</div>
+        <div class="nav-item" id="nav-del" onclick="nav('del', this)">Delivery Reports</div>
+        <div class="nav-item" id="nav-client" onclick="nav('client', this)">Client Register</div>
+        <div class="nav-item" id="nav-staff" onclick="nav('staff', this)">Staff Register</div>
+        <div class="nav-item" id="nav-routeMaster" onclick="nav('routeMaster', this)">Route Register</div>
+        <div class="nav-item" id="nav-sales" onclick="nav('sales', this)">Sales Analytics</div>
     </div>
 </div>
 
 <div class="main">
     <div class="topbar">
         <div class="page-title" id="pageTitle">Dashboard</div>
-        <div style="display:flex; align-items:center; gap:15px">
-            <div class="user">Owner<div class="avatar">O</div></div>
-        </div>
+        <div class="user">Owner<div class="avatar">O</div></div>
     </div>
 
     <!-- HOME VIEW -->
     <div id="home" class="content active">
         <div class="kpi-grid">
-            <div class="card">
-                <div class="label">Total Production</div>
-                <div class="val" id="kpiProd">0 L</div>
-                <div class="sub">Across all shops today</div>
-            </div>
-            <div class="card">
-                <div class="label">Total Deliveries</div>
-                <div class="val" id="kpiDel">0 L</div>
-                <div class="sub">Dispatched via Route</div>
-            </div>
-            <div class="card">
-                <div class="label">Active Staff</div>
-                <div class="val" id="kpiStaff">-</div>
-                <div class="sub">On Production duties</div>
-            </div>
-            <div class="card">
-                <div class="label">Stock Efficiency</div>
-                <div class="val" style="color:var(--success)">Good</div>
-                <div class="sub">Based on returns</div>
-            </div>
+            <div class="card"><div class="label">Total Production</div><div class="val" id="kpiProd">0 L</div></div>
+            <div class="card"><div class="label">Total Deliveries</div><div class="val" id="kpiDel">0 L</div></div>
+            <div class="card"><div class="label">Active Staff</div><div class="val" id="kpiStaff">-</div></div>
+            <div class="card"><div class="label">Active Routes</div><div class="val" id="kpiRoutes">0</div></div>
         </div>
-        <div class="card" style="height: 400px; padding:20px;">
-             <canvas id="chartMain"></canvas>
+        <div class="card" style="height: 400px; padding:20px;"><canvas id="chartMain"></canvas></div>
+    </div>
+
+    <!-- STAFF VIEW -->
+    <div id="staff" class="content">
+        <div class="filter-bar"><strong>Staff Register</strong><button class="btn btn-primary" style="margin-left:auto" onclick="openStaffModal()">+ Add Staff</button></div>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>Name</th><th>Role</th><th>Shop</th><th>Action</th></tr></thead>
+                <tbody id="staffTable"></tbody>
+            </table>
         </div>
     </div>
 
     <!-- PRODUCTION VIEW -->
     <div id="prod" class="content">
-        <div class="filter-bar" style="gap:15px; margin-bottom: 24px;">
-            <strong>Production Master</strong>
-            <div style="display:flex; align-items:center; background:white; border:1px solid var(--border); border-radius:6px; padding:2px 10px">
-                <span style="font-size:12px">Hub:</span>
-                <select id="prodFilterShop" onchange="renderProduction()" style="border:none; outline:none; padding:6px; width:150px; font-weight:600; background:transparent">
-                    <option value="ALL">All Hubs</option>
-                    <option value="Nettor">Nettor</option>
-                    <option value="Kannankulangara">Kannankulangara</option>
-                    <option value="Vadakkekotta">Vadakkekotta</option>
-                </select>
-            </div>
+        <div class="filter-bar">
+            <strong>Production Logs</strong>
             <input type="date" id="prodDate" onchange="loadDateData()">
-            <button class="btn btn-primary" style="margin-left:auto" onclick="openProdModal()">+ New Entry</button>
         </div>
-
-        <!-- 1. SUMMARY CARDS -->
-        <div class="prod-summary-grid" style="grid-template-columns: repeat(4, 1fr);">
-            <div class="summary-card">
-                <div class="lbl">Total Production</div>
-                <div class="val" id="uiProdTotal">0 L</div>
-            </div>
-            <div class="summary-card packet">
-                <div class="lbl">Packet Mode</div>
-                <div class="val" id="uiProdPacket">0 L</div>
-            </div>
-            <div class="summary-card loose">
-                <div class="lbl">Loose Mode</div>
-                <div class="val" id="uiProdLoose">0 L</div>
-            </div>
-            <div class="summary-card" style="border-left:4px solid var(--success)">
-                <div class="lbl">Production Avg</div>
-                <div class="val" id="uiProdAvg">0</div>
-                <div style="font-size:10px; color:var(--text-light); margin-top:4px">Avg Packets / Batch</div>
-            </div>
-        </div>
-
-        <!-- 2. STAFF PERFORMANCE GRID -->
-        <div style="font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px">Staff Performance Summary</div>
-        <div id="staffPerfGrid" class="staff-perf-grid"></div>
-
-        <!-- 3. DETAILED BATCH LOGS -->
-        <div style="font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px">Detailed Batch Logs</div>
         <div class="table-container">
             <table>
-                <thead>
-                    <tr>
-                        <th>Batch</th>
-                        <th>Shop</th>
-                        <th>Staff</th>
-                        <th>Product</th>
-                        <th>Type</th>
-                        <th style="text-align:right">Qty</th>
-                        <th>Action</th>
-                    </tr>
-                    <tr class="filter-row">
-                        <th><input type="text" id="fBatch" oninput="renderProduction()" placeholder="Batch..."></th>
-                        <th>
-                            <select id="fShop" onchange="renderProduction()">
-                                <option value="ALL">All Hubs</option>
-                                <option>Nettor</option>
-                                <option>Kannankulangara</option>
-                                <option>Vadakkekotta</option>
-                            </select>
-                        </th>
-                        <th><select id="fStaff" onchange="renderProduction()"><option value="ALL">All Staff</option></select></th>
-                        <th>
-                            <select id="fProd" onchange="renderProduction()">
-                                <option value="ALL">All Products</option>
-                                <option>DOSA</option>
-                                <option>APPAM</option>
-                            </select>
-                        </th>
-                        <th>
-                            <select id="fType" onchange="renderProduction()">
-                                <option value="ALL">All Types</option>
-                                <option>PACKET</option>
-                                <option>LOOSE</option>
-                            </select>
-                        </th>
-                        <th></th>
-                        <th></th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Batch</th><th>Shop</th><th>Staff</th><th>Product</th><th>Type</th><th style="text-align:right">Qty</th></tr></thead>
                 <tbody id="prodTable"></tbody>
             </table>
         </div>
-
-        <!-- 4. STAFF SALARY & PERFORMANCE -->
-        <div style="margin-top:40px">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
-                <div style="font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase">Staff Salary & Performance</div>
-                <div style="font-size:11px; color:var(--success); font-weight:700">Earnings: ₹75 / Batch (after 4)</div>
-            </div>
-            <div id="staffSalaryGrid" class="salary-grid"></div>
-        </div>
     </div>
 
+    <!-- DELIVERY VIEW -->
     <div id="del" class="content">
-        <div class="filter-bar">
-            <strong>Delivery Master</strong>
-            <input type="date" id="delDate" onchange="loadDateData()" style="margin-left: 10px;">
-            <button class="btn btn-primary" style="margin-left:auto" onclick="openDelModal()">+ Add Trip Entry</button>
-        </div>
+        <div class="filter-bar"><strong>Delivery Reports</strong><input type="date" id="delDate" onchange="loadDateData()"></div>
         <div class="driver-grid" id="deliveryGrid"></div>
-        
-        <div style="margin-top:24px; font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px">Raw Trip Logs</div>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Driver</th>
-                        <th>Type</th>
-                        <th style="text-align:right">Dosa (L)</th>
-                        <th style="text-align:right">Appam (L)</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody id="delTable"></tbody>
-            </table>
-        </div>
     </div>
 
     <!-- CLIENT VIEW -->
     <div id="client" class="content">
-        <div class="filter-bar">
-            <strong>Client Register</strong>
-            <div style="margin-left:20px; flex:1; display:flex; align-items:center; background:white; border:1px solid var(--border); border-radius:8px; padding:4px 12px; max-width:400px">
-                <span>🔍</span>
-                <input type="text" id="clientSearch" oninput="renderClients()" placeholder="Search from 1000+ clients..." style="border:none; outline:none; padding:6px; width:100%; font-size:13px; font-weight:600">
-            </div>
-            <button class="btn btn-primary" style="margin-left:auto" onclick="openClientModal()">+ Add New Client</button>
-        </div>
+        <div class="filter-bar"><strong>Client Register</strong><button class="btn btn-primary" style="margin-left:auto" onclick="openClientModal()">+ Add Client</button></div>
         <div class="table-container">
             <table>
-                <thead><tr><th>Name</th><th>Phone</th><th>Price (Dosa)</th><th>Price (Appam)</th><th>Action</th></tr></thead>
+                <thead><tr><th>Name</th><th>Phone</th><th>Price (D/A)</th><th>Action</th></tr></thead>
                 <tbody id="clientTable"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- STAFF VIEW -->
-    <div id="staff" class="content">
-        <div class="filter-bar">
-            <strong>Staff Register</strong>
-            <button class="btn btn-primary" style="margin-left:auto" onclick="openStaffModal()">+ Add New Staff</button>
-        </div>
-        <div class="table-container">
-            <table>
-                <thead><tr><th>Name</th><th>Role / Type</th><th>Primary Shop</th><th>Action</th></tr></thead>
-                <tbody id="staffTable"></tbody>
             </table>
         </div>
     </div>
 
     <!-- ROUTE VIEW -->
     <div id="routeMaster" class="content">
-        <div class="filter-bar">
-            <strong>Route Register</strong>
-            <button class="btn btn-primary" style="margin-left:auto" onclick="openRouteModal()">+ Add New Route</button>
-        </div>
+        <div class="filter-bar"><strong>Route Master</strong><button class="btn btn-primary" style="margin-left:auto" onclick="openRouteModal()">+ Add Route</button></div>
         <div class="table-container">
             <table>
                 <thead><tr><th>Route Name</th><th>Action</th></tr></thead>
@@ -349,163 +170,55 @@
         </div>
     </div>
 
-    <!-- SALES ANALYTICS VIEW -->
+    <!-- SALES VIEW -->
     <div id="sales" class="content">
-        <div class="filter-bar" style="margin-bottom:24px">
-            <div>
-                <strong style="font-size:18px">Sales & Revenue Analytics</strong>
-                <div style="font-size:11px; color:var(--text-light); font-weight:600">Real-time Financial Intelligence (Zoho Style)</div>
-            </div>
-            <select id="salesPeriod" onchange="renderSales()" style="margin-left:auto; padding:8px 16px; border-radius:8px; border:1px solid var(--border); font-weight:700; color:var(--primary); cursor:pointer">
-                <option value="30">Past 30 Days</option>
-                <option value="365">Past 365 Days</option>
-            </select>
-        </div>
-
-        <div class="sales-grid">
-            <div class="sales-card highlight">
-                <div class="lbl">Total Revenue</div>
-                <div class="val" id="salesTotalRev">₹0</div>
-                <div style="font-size:10px; color:var(--primary); font-weight:700">GROSS SALES</div>
-            </div>
-            <div class="sales-card" style="border-top:4px solid var(--success)">
-                <div class="lbl">Cash Collected</div>
-                <div class="val" id="salesTotalCash">₹0</div>
-                <div style="font-size:10px; color:var(--success); font-weight:700">IN-HAND CASH</div>
-            </div>
-            <div class="sales-card" style="border-top:4px solid var(--danger)">
-                <div class="lbl">Total Outstanding</div>
-                <div class="val" id="salesTotalOut">₹0</div>
-                <div style="font-size:10px; color:var(--danger); font-weight:700">CLIENT BALANCE</div>
-            </div>
-            <div class="sales-card" style="border-top:4px solid #f59e0b">
-                <div class="lbl">Active Clients</div>
-                <div class="val" id="salesActiveClients">0</div>
-                <div style="font-size:10px; color:#f59e0b; font-weight:700">TRANSACTING TODAY</div>
-            </div>
-        </div>
-
-        <div class="report-layout">
-            <div class="chart-container">
-                <div style="font-size:12px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px; display:flex; align-items:center; gap:8px">
-                    <span style="width:12px; height:12px; background:var(--primary); border-radius:3px"></span>
-                    Revenue Trend (Daily)
-                </div>
-                <canvas id="salesChart"></canvas>
-            </div>
-            <div class="driver-list-panel">
-                <div style="font-size:12px; font-weight:800; color:var(--text-light); text-transform:uppercase; margin-bottom:12px">Route / Delivery Collections (Today)</div>
-                <div id="salesDriverList"></div>
-            </div>
-        </div>
-
-        <div style="margin-top:32px">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
-                <div style="font-size:13px; font-weight:800; color:var(--text-light); text-transform:uppercase">Client Master Statement</div>
-                <div style="font-size:11px; color:var(--text-light)">Sorted by Balance Due</div>
-            </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Client Name</th>
-                            <th>Total Sales</th>
-                            <th>Total Received</th>
-                            <th style="text-align:right">Balance Due</th>
-                        </tr>
-                    </thead>
-                    <tbody id="salesClientTable"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-</div>
-
-<!-- PRODUCTION MODAL -->
-<div class="modal-overlay" id="prodModal">
-    <div class="modal">
-        <h3 style="margin-top:0">Production Entry</h3>
-        <input type="hidden" id="pId">
-        <div class="form-row"><label>Shop</label><select id="pShop"><option>Nettor</option><option>Kannankulangara</option><option>Vadakkekotta</option></select></div>
-        <div class="form-row"><label>Staff</label><select id="pStaff"></select></div> <!-- Populated dynamically -->
-        <div class="form-row"><label>Product</label><select id="pProd"><option>DOSA</option><option>APPAM</option></select></div>
-        <div class="form-row"><label>Type</label><select id="pType"><option>PACKET</option><option>LOOSE</option></select></div>
-        <div class="form-row"><label>Quantity (L)</label><input type="number" id="pQty"></div>
-        <div style="display:flex; gap:10px; margin-top:20px">
-            <button class="btn btn-primary" style="flex:1" onclick="saveProduction()">Save</button>
-            <button class="btn btn-danger" style="flex:1" onclick="closeProdModal()">Cancel</button>
+        <div class="filter-bar"><strong>Sales Analytics</strong></div>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>Client</th><th>Total Sales</th><th>Total Paid</th><th style="text-align:right">Balance</th></tr></thead>
+                <tbody id="salesTable"></tbody>
+            </table>
         </div>
     </div>
 </div>
 
-<!-- CLIENT MODAL -->
-<div class="modal-overlay" id="clientModal">
-    <div class="modal">
-        <h3 style="margin-top:0">Client Details</h3>
-        <input type="hidden" id="cId"> <!-- Use Name as ID for simplicity or index -->
-        <div class="form-row"><label>Client Name</label><input type="text" id="cName" placeholder="e.g. Fathima Stores"></div>
-        <div class="form-row"><label>Phone Number</label><input type="text" id="cPhone" placeholder="Mobile"></div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
-            <div class="form-row"><label>Price: Dosa (₹)</label><input type="number" id="cPriceD" value="45"></div>
-            <div class="form-row"><label>Price: Appam (₹)</label><input type="number" id="cPriceA" value="55"></div>
-        </div>
-        <div style="display:flex; gap:10px; margin-top:20px">
-            <button class="btn btn-primary" style="flex:1" onclick="saveClient()">Save Client</button>
-            <button class="btn btn-danger" style="flex:1" onclick="closeClientModal()">Cancel</button>
-        </div>
-    </div>
-</div>
+<!-- MODALS -->
+<div class="modal-overlay" id="staffModal"><div class="modal">
+    <h3>Staff Details</h3><input type="hidden" id="sId">
+    <div class="form-row"><label>Name</label><input type="text" id="sName"></div>
+    <div class="form-row"><label>Role</label><select id="sType"><option value="PRODUCTION">Production</option><option value="DELIVERY">Delivery</option><option value="DISPATCH">Dispatch</option></select></div>
+    <div class="form-row"><label>Shop</label><select id="sShop"><option>Nettor</option><option>Kannankulangara</option><option>Vadakkekotta</option><option value="Common">Common</option></select></div>
+    <div style="display:flex; gap:10px; margin-top:20px"><button class="btn btn-primary" style="flex:1" onclick="saveStaff()">Save</button><button class="btn btn-danger" style="flex:1" onclick="closeStaffModal()">Cancel</button></div>
+</div></div>
 
-<!-- STAFF MODAL -->
-<div class="modal-overlay" id="staffModal">
-    <div class="modal">
-        <h3 style="margin-top:0">Staff Details</h3>
-        <input type="hidden" id="sId">
-        <div class="form-row"><label>Staff Name</label><input type="text" id="sName" placeholder="e.g. Anand"></div>
-        <div class="form-row"><label>Type</label><select id="sType"><option value="PRODUCTION">Production Staff</option><option value="DELIVERY">Delivery / Driver</option></select></div>
-        <div class="form-row"><label>Primary Shop / Hub</label><select id="sShop"><option>Nettor</option><option>Kannankulangara</option><option>Vadakkekotta</option><option value="Common">Common / All</option></select></div>
-        <div style="display:flex; gap:10px; margin-top:20px">
-            <button class="btn btn-primary" style="flex:1" onclick="saveStaff()">Save Staff</button>
-            <button class="btn btn-danger" style="flex:1" onclick="closeStaffModal()">Cancel</button>
-        </div>
-    </div>
-</div>
+<div class="modal-overlay" id="clientModal"><div class="modal">
+    <h3>Client Details</h3><input type="hidden" id="cId">
+    <div class="form-row"><label>Name</label><input type="text" id="cName"></div>
+    <div class="form-row"><label>Phone</label><input type="text" id="cPhone"></div>
+    <div class="form-row"><label>Price Dosa</label><input type="number" id="cPriceD" value="45"></div>
+    <div class="form-row"><label>Price Appam</label><input type="number" id="cPriceA" value="55"></div>
+    <div style="display:flex; gap:10px; margin-top:20px"><button class="btn btn-primary" style="flex:1" onclick="saveClient()">Save</button><button class="btn btn-danger" style="flex:1" onclick="closeClientModal()">Cancel</button></div>
+</div></div>
 
-<!-- ROUTE MODAL -->
-<div class="modal-overlay" id="routeModal">
-    <div class="modal">
-        <h3 style="margin-top:0">Route Details</h3>
-        <input type="hidden" id="rIdx">
-        <div class="form-row"><label>Route Name</label><input type="text" id="rName" placeholder="e.g. Udhayamperoor"></div>
-        <div style="display:flex; gap:10px; margin-top:20px">
-            <button class="btn btn-primary" style="flex:1" onclick="saveRoute()">Save Route</button>
-            <button class="btn btn-danger" style="flex:1" onclick="closeRouteModal()">Cancel</button>
-        </div>
-    </div>
-</div>
-
-<!-- DELIVERY MODAL -->
-<div class="modal-overlay" id="delModal">
-    <div class="modal">
-        <h3 style="margin-top:0">Delivery Entry</h3>
-        <input type="hidden" id="dId">
-        <input type="hidden" id="dTypeOrig">
-        <div class="form-row"><label>Driver</label><select id="dDriver"></select></div>
-        <div class="form-row"><label>Type</label><select id="dType"><option>PACKET</option><option>LOOSE</option></select></div>
-        <div class="form-row"><label>From Hub</label><select id="dHub"><option>Nettor</option><option>Kannankulangara</option><option>Vadakkekotta</option></select></div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
-            <div class="form-row"><label>Dosa (L)</label><input type="number" id="dDosa"></div>
-            <div class="form-row"><label>Appam (L)</label><input type="number" id="dAppam"></div>
-        </div>
-        <div style="display:flex; gap:10px; margin-top:20px">
-            <button class="btn btn-primary" style="flex:1" onclick="saveDelivery()">Save Trip</button>
-            <button class="btn btn-danger" style="flex:1" onclick="closeDelModal()">Cancel</button>
-        </div>
-    </div>
-</div>
+<div class="modal-overlay" id="routeModal"><div class="modal">
+    <h3>Route Details</h3><input type="hidden" id="rIdx">
+    <div class="form-row"><label>Name</label><input type="text" id="rName"></div>
+    <div style="display:flex; gap:10px; margin-top:20px"><button class="btn btn-primary" style="flex:1" onclick="saveRoute()">Save</button><button class="btn btn-danger" style="flex:1" onclick="closeRouteModal()">Cancel</button></div>
+</div></div>
 
 <script>
+/* --- NAVIGATION --- */
+window.nav = function(id, el) {
+    document.querySelectorAll('.content').forEach(d => d.classList.remove('active'));
+    const target = document.getElementById(id);
+    if(target) target.classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(d => d.classList.remove('active'));
+    if(el) el.classList.add('active');
+    const title = document.getElementById('pageTitle');
+    if(title && el) title.innerText = el.innerText;
+};
+
+/* --- FIREBASE --- */
 const firebaseConfig = {
   apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
   authDomain: "iyers-c0944.firebaseapp.com",
@@ -514,1144 +227,179 @@ const firebaseConfig = {
   messagingSenderId: "234376255779",
   appId: "1:234376255779:web:8f4b43ff3f66cfd4071496"
 };
-
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-function doc(dbRef, ...segments) {
-    if (segments.length < 2) throw new Error("doc() needs collection and document id");
-    let ref = dbRef.collection(segments[0]).doc(segments[1]);
-    for (let i = 2; i < segments.length; i += 2) {
-        ref = ref.collection(segments[i]).doc(segments[i + 1]);
-    }
-    return ref;
-}
+/* --- STATE --- */
+let erpDB = {};
+let staffDB = [];
+let clientDB = [];
+let routeMasterDB = [];
+let routeDaysDB = {};
+let currentDate = new Date().toISOString().split('T')[0];
+let mainChart = null;
 
-function collection(dbRef, ...segments) {
-    let ref = dbRef.collection(segments[0]);
-    for (let i = 1; i < segments.length; i += 2) {
-        ref = ref.doc(segments[i]).collection(segments[i + 1]);
-    }
-    return ref;
-}
-
-function setDoc(ref, data) { return ref.set(data); }
-function onSnapshot(ref, next, error) { return ref.onSnapshot(next, error); }
-function getDoc(ref) { return ref.get(); }
-function getDocs(ref) { return ref.get(); }
-function deleteDoc(ref) { return ref.delete(); }
-
-// Expose functions and state to global scope
-    /* --- CONSTANTS & CONFIG --- */
-    const KEY_PROD = "IYERSFOOD_ERP_V3_3";
-    const KEY_ROUTE = "IYERS_ROUTE_V3_1";
-    const KEY_CLIENTS = "IYERS_CLIENT_DB_V2";
-
-    let staffDB = []; // Array of Objects: { name, type, shop }
-    let routeMasterDB = []; // Array of route name objects for delivery app
-    let prodDB = {};
-    let routeDB = {};
-    let routeDaysDB = {};
-    let legacyRouteDB = {};
-    let clientDB = []; // Array of Objects: { name, phone, pd, pa }
-    let currentDate = new Date().toISOString().split('T')[0];
-
-    const INITIAL_CLIENTS = [
-        "Prime Super Market", "Krishna Stores", "Prasanth", "Velayudhan", "St. Marys", "Browns Bakery",
-        "Margin Free", "Madha Veg", "Pauly Stores", "Angel", "True Bell", "KM Stores", "Ponnus", "Jackson",
-        "Shaji", "Super Bakers Matt.", "Little Market", "Shipyard", "Anu Stores", "Family Mini Mart", "Joy Stores",
-        "Super Bakery Panam", "Milma", "Jomon James", "Sharadha", "SI Bakery", "Prince Stores", "Karthiga",
-        "Sree Krishna", "Charls", "TJS", "Babys", "Bake and Take", "Nathaniya", "Jeyan", "Puthenveetil",
-        "KL 39", "Royal", "Salim", "Dreams", "Kkar", "Srikrishna (U)", "Sweet Corner", "Sathar Veg", "Radha",
-        "Joys", "Praveeli", "Divine Kumbalam", "Tea Bay", "Divine Madavana", "V Bazaar", "AS Palacharakukada",
-        "Fourstar", "MK Stores", "Anjana", "NM Stores", "AR", "Mani Stores", "Kerala Stores", "Nice Bakery",
-        "Velikagathu", "Anil Stores", "Ravi Stores", "Arun Bakery", "AKR", "Shopy Fresh", "Sajith Bakery",
-        "Lalan", "Padmanaban", "AMK", "Sreelaya", "MT Mart", "Daily Home Needs", "Jafer", "Fathima Bakery",
-        "Global Fresh", "Shiyas", "Srilakshmi", "Nepolian", "Fathima", "Malabar", "Madha Stores", "SN Supermarket",
-        "Will Mart", "SN Gandhi Nagar", "Nazar", "Valluvassery", "St Joseph", "Chakkalakal", "Magic Oven",
-        "Subway", "Vasinjo", "Saketh", "Ammus", "Janatha Margin", "Homey Mart", "Ragava", "Mallus", "Sreccs",
-        "CKP", "SRP", "Royal Super Market", "TKM Fresh Mart", "Kairali", "T Mart", "MN", "Homey",
-        "Krishna Stores Kani", "Nitha Sudheesh", "Radhakrishnan", "Jasha Bakery", "Rajesh Stores", "Royal Bakery",
-        "Pottayil Stores", "SP Stores", "Sini", "Darshana", "Aruveli", "Papilon", "Hairiseed", "Anjaneya",
-        "Hishighness", "AV Mart", "SB"
-    ];
-
-    function getEmptyRouteCategory() {
-        return { trips: [], returns: [], shops: {}, tally: { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] }, activeShops: [] };
-    }
-
-    function getEmptyRouteDay() {
-        return { PACKET: getEmptyRouteCategory(), LOOSE: getEmptyRouteCategory() };
-    }
-
-    function isSingleCategoryRoutePayload(dayData) {
-        if (!dayData || typeof dayData !== "object") return false;
-        return Array.isArray(dayData.trips) || Array.isArray(dayData.returns) || !!dayData.shops || !!dayData.tally;
-    }
-
-    function normalizeRouteDay(dayData, fallbackCategory = "PACKET") {
-        const base = getEmptyRouteDay();
-        if (!dayData || typeof dayData !== "object") return base;
-
-        if (isSingleCategoryRoutePayload(dayData)) {
-            base[fallbackCategory] = {
-                ...base[fallbackCategory],
-                trips: Array.isArray(dayData.trips) ? dayData.trips : [],
-                returns: Array.isArray(dayData.returns) ? dayData.returns : [],
-                shops: dayData.shops || {},
-                tally: {
-                    ...base[fallbackCategory].tally,
-                    ...(dayData.tally || {}),
-                    cashInHandMap: (dayData.tally && dayData.tally.cashInHandMap) || {},
-                    denomsMap: (dayData.tally && dayData.tally.denomsMap) || {},
-                    expenses: (dayData.tally && Array.isArray(dayData.tally.expenses)) ? dayData.tally.expenses : [],
-                    extraIncome: (dayData.tally && Array.isArray(dayData.tally.extraIncome)) ? dayData.tally.extraIncome : []
-                },
-                activeShops: Array.isArray(dayData.activeShops) ? dayData.activeShops : []
-            };
-            return base;
-        }
-
-        ["PACKET", "LOOSE"].forEach(cat => {
-            const incoming = dayData[cat] || {};
-            base[cat] = {
-                ...base[cat],
-                ...incoming,
-                trips: Array.isArray(incoming.trips) ? incoming.trips : [],
-                returns: Array.isArray(incoming.returns) ? incoming.returns : [],
-                shops: incoming.shops || {},
-                tally: {
-                    ...base[cat].tally,
-                    ...(incoming.tally || {}),
-                    cashInHandMap: (incoming.tally && incoming.tally.cashInHandMap) || {},
-                    denomsMap: (incoming.tally && incoming.tally.denomsMap) || {},
-                    expenses: (incoming.tally && Array.isArray(incoming.tally.expenses)) ? incoming.tally.expenses : [],
-                    extraIncome: (incoming.tally && Array.isArray(incoming.tally.extraIncome)) ? incoming.tally.extraIncome : []
-                },
-                activeShops: Array.isArray(incoming.activeShops) ? incoming.activeShops : []
-            };
-        });
-
-        return base;
-    }
-
-    function syncRouteDB() {
-        routeDB = { ...legacyRouteDB, ...routeDaysDB };
-    }
-
-    function saveRouteDay(date) {
-        const payload = JSON.parse(JSON.stringify(normalizeRouteDay(routeDB[date] || getEmptyRouteDay())));
-        routeDB[date] = payload;
-        routeDaysDB[date] = payload;
-        syncRouteDB();
-        return setDoc(doc(db, "routeDays", date), payload);
-    }
-
-    function resetAllData() {
-        if (confirm("⚠️ CAUTION: FULL SYSTEM RESET?\n\nThis will permanently delete ALL PRODUCTION AND DELIVERY LOGS from the entire history.\n\nNOTE: YOUR CLIENT REGISTER (1000+ SHOPS) WILL BE PRESERVED.\n\nAre you sure you want to proceed?")) {
-            getDocs(collection(db, "routeDays")).then((snap) => {
-                const deletions = [];
-                snap.forEach((routeDoc) => deletions.push(deleteDoc(routeDoc.ref)));
-                return Promise.all([
-                    setDoc(doc(db, "data", "erp"), {}),
-                    setDoc(doc(db, "data", "route"), {}),
-                    ...deletions
-                ]);
-            }).then(() => {
-                alert("All logs have been cleared on Firestore. Client register was preserved.");
-                location.reload();
-            }).catch(err => alert("Error clearing data: " + err.message));
-        }
-    }
-
-    /* --- INIT --- */
-    window.onload = function() {
-        try {
-            if(document.getElementById('prodDate')) document.getElementById('prodDate').value = currentDate;
-            if(document.getElementById('delDate')) document.getElementById('delDate').value = currentDate;
-            
-            // Populate Staff Select in Modal
-            if(document.getElementById('pShop')) {
-                document.getElementById('pShop').addEventListener('change', updateModalStaff);
-                updateModalStaff();
-            }
-
-            loadData();
-        } catch(e) {
-            console.error("Initialization error:", e);
-        }
-    };
-
-    function nav(id, el) {
-        try {
-            document.querySelectorAll('.content').forEach(d=>d.classList.remove('active'));
-            const target = document.getElementById(id);
-            if(target) target.classList.add('active');
-            
-            document.querySelectorAll('.nav-item').forEach(d=>d.classList.remove('active'));
-            if(el) el.classList.add('active');
-            
-            const title = document.getElementById('pageTitle');
-            if(title && el) title.innerText = el.innerText;
-        } catch(e) {
-            console.error("Navigation error:", e);
-        }
-    }
-    window.nav = nav;
-
-    // Expose functions and state to global scope
-    function syncWindow() {
-        Object.assign(window, {
-            prodDB, routeDB, clientDB, currentDate, routeMasterDB,
-            nav, resetAllData, loadDateData, openProdModal, closeProdModal, saveProduction,
-            editProd, deleteProd, openClientModal, closeClientModal, saveClient, editClient,
-            deleteClient, renderClients, renderProduction, renderSales, renderDelivery,
-            updateModalStaff, refreshUI, resetTableFilters, saveStaff, openStaffModal, closeStaffModal, editStaff, deleteStaff, saveDelivery, openDelModal, closeDelModal, editDel, deleteDel,
-            openRouteModal, closeRouteModal, saveRoute, editRoute, deleteRoute, renderRouteMaster
-        });
-    }
-    syncWindow();
-
-
-    /* --- DATA LAYER --- */
-    function loadDateData() {
-        // Sync currentDate with whichever tab is active
-        const prodDateEl = document.getElementById('prodDate');
-        const delDateEl = document.getElementById('delDate');
-        
-        if(document.getElementById('prod').classList.contains('active')) {
-            currentDate = prodDateEl ? prodDateEl.value : currentDate;
-        } else if(document.getElementById('del').classList.contains('active')) {
-            currentDate = delDateEl ? delDateEl.value : currentDate;
-        } else {
-            currentDate = (prodDateEl ? prodDateEl.value : null) || (delDateEl ? delDateEl.value : null) || currentDate;
-        }
-        
-        if(prodDateEl) prodDateEl.value = currentDate;
-        if(delDateEl) delDateEl.value = currentDate;
-        
-        resetTableFilters();
-        syncWindow();
+/* --- DATA LOADING --- */
+function loadData() {
+    db.collection("data").doc("erp_v4").onSnapshot(snap => { if(snap.exists) erpDB = snap.data(); refreshUI(); });
+    db.collection("data").doc("staff_v4").onSnapshot(snap => { if(snap.exists) staffDB = snap.data().list || []; refreshUI(); });
+    db.collection("data").doc("clients_v4").onSnapshot(snap => { if(snap.exists) clientDB = snap.data().list || []; refreshUI(); });
+    db.collection("data").doc("routeMaster").onSnapshot(snap => { if(snap.exists) routeMasterDB = snap.data().list || []; refreshUI(); });
+    db.collection("routeDays").onSnapshot(snap => {
+        snap.forEach(d => { routeDaysDB[d.id] = d.data(); });
         refreshUI();
-    }
+    });
+}
 
-    function loadData() {
-        // Real-time Production logs
-        onSnapshot(doc(db, "data", "erp"), (snapshot) => {
-            if(snapshot.exists) prodDB = snapshot.data();
-            syncWindow();
-            refreshUI();
-        });
-        
-        // Real-time Delivery logs from per-day route documents
-        onSnapshot(collection(db, "routeDays"), (snapshot) => {
-            routeDaysDB = {};
-            snapshot.forEach((routeDoc) => {
-                routeDaysDB[routeDoc.id] = normalizeRouteDay(routeDoc.data());
-            });
-            syncRouteDB();
-            syncWindow();
-            refreshUI();
-        });
+function refreshUI() {
+    try {
+        renderHome();
+        renderStaffs();
+        renderProduction();
+        renderDelivery();
+        renderClients();
+        renderRouteMaster();
+        renderSales();
+    } catch(e) { console.error("UI Refresh Error:", e); }
+}
 
-        // Legacy route fallback for older history not yet migrated
-        onSnapshot(doc(db, "data", "route"), (snapshot) => {
-            legacyRouteDB = {};
-            if(snapshot.exists) {
-                const raw = snapshot.data() || {};
-                Object.keys(raw).forEach((dateKey) => {
-                    if (!routeDaysDB[dateKey]) legacyRouteDB[dateKey] = normalizeRouteDay(raw[dateKey]);
-                });
-            }
-            syncRouteDB();
-            syncWindow();
-            refreshUI();
-        });
-        
-        loadClients();
-        loadStaff();
-        loadRouteMaster();
-    }
-    
-    function loadRouteMaster() {
-        onSnapshot(doc(db, "data", "routeMaster"), (snapshot) => {
-            if(snapshot.exists) {
-                routeMasterDB = (snapshot.data().list || [])
-                    .map(r => typeof r === "string" ? { name: r } : r)
-                    .filter(r => r && r.name);
-            } else {
-                routeMasterDB = ["Udhayamperoor", "Nettoor", "Kannankulangara", "Vadakkekotta"].map(n => ({name: n}));
-                saveRouteMasterDB();
-            }
-            syncWindow();
-            refreshUI();
-        });
-    }
+function loadDateData() {
+    const pD = document.getElementById('prodDate');
+    const dD = document.getElementById('delDate');
+    if(pD && pD.value) currentDate = pD.value;
+    if(dD && dD.value) currentDate = dD.value;
+    refreshUI();
+}
 
-    function saveRouteMasterDB() {
-        setDoc(doc(db, "data", "routeMaster"), { list: routeMasterDB })
-            .catch(err => console.error("RouteMaster sync failed", err));
-    }
+/* --- STAFF CRUD --- */
+function saveStaff() {
+    const idx = document.getElementById('sId').value;
+    const name = document.getElementById('sName').value.trim();
+    if(!name) return;
+    const type = document.getElementById('sType').value;
+    const shop = document.getElementById('sShop').value;
+    const s = { name, type, shop };
+    if(idx !== "") staffDB[idx] = s; else staffDB.push(s);
+    db.collection("data").doc("staff_v4").set({ list: staffDB }).then(closeStaffModal);
+}
+function openStaffModal() { document.getElementById('staffModal').style.display="flex"; document.getElementById('sId').value=""; document.getElementById('sName').value=""; }
+function closeStaffModal() { document.getElementById('staffModal').style.display="none"; }
+function editStaff(i) { const s = staffDB[i]; openStaffModal(); document.getElementById('sId').value=i; document.getElementById('sName').value=s.name; document.getElementById('sType').value=s.type; document.getElementById('sShop').value=s.shop; }
+function deleteStaff(i) { if(confirm("Delete Staff?")) { staffDB.splice(i,1); db.collection("data").doc("staff_v4").set({ list: staffDB }); } }
 
-    function loadStaff() {
-        onSnapshot(doc(db, "data", "staff"), (snapshot) => {
-            if(snapshot.exists) {
-                staffDB = snapshot.data().list || [];
-            } else {
-                // Initial fallback
-                staffDB = [
-                    { name: "Geethu", type: "PRODUCTION", shop: "Nettor" },
-                    { name: "Sedhu", type: "PRODUCTION", shop: "Nettor" },
-                    { name: "Hathika", type: "PRODUCTION", shop: "Nettor" },
-                    { name: "Roshna", type: "PRODUCTION", shop: "Nettor" },
-                    { name: "Rincy", type: "PRODUCTION", shop: "Nettor" },
-                    { name: "Sreedevi", type: "PRODUCTION", shop: "Kannankulangara" },
-                    { name: "Rejitha", type: "PRODUCTION", shop: "Kannankulangara" },
-                    { name: "Suma", type: "PRODUCTION", shop: "Kannankulangara" },
-                    { name: "Remya", type: "PRODUCTION", shop: "Vadakkekotta" },
-                    { name: "Anand", type: "DELIVERY", shop: "Common" },
-                    { name: "Renjith", type: "DELIVERY", shop: "Common" },
-                    { name: "Aswin", type: "DELIVERY", shop: "Common" },
-                    { name: "Sanja", type: "DELIVERY", shop: "Common" }
-                ];
-                saveStaffs();
-            }
-            syncWindow();
-            refreshUI();
-        });
-    }
+/* --- CLIENT CRUD --- */
+function saveClient() {
+    const idx = document.getElementById('cId').value;
+    const name = document.getElementById('cName').value.trim();
+    if(!name) return;
+    const c = { name, phone: document.getElementById('cPhone').value, pd: Number(document.getElementById('cPriceD').value), pa: Number(document.getElementById('cPriceA').value) };
+    if(idx !== "") clientDB[idx] = c; else clientDB.push(c);
+    db.collection("data").doc("clients_v4").set({ list: clientDB }).then(closeClientModal);
+}
+function openClientModal() { document.getElementById('clientModal').style.display="flex"; document.getElementById('cId').value=""; document.getElementById('cName').value=""; }
+function closeClientModal() { document.getElementById('clientModal').style.display="none"; }
+function editClient(i) { const c = clientDB[i]; openClientModal(); document.getElementById('cId').value=i; document.getElementById('cName').value=c.name; document.getElementById('cPhone').value=c.phone; document.getElementById('cPriceD').value=c.pd; document.getElementById('cPriceA').value=c.pa; }
+function deleteClient(i) { if(confirm("Delete Client?")) { clientDB.splice(i,1); db.collection("data").doc("clients_v4").set({ list: clientDB }); } }
 
-    function saveStaffs() {
-        setDoc(doc(db, "data", "staff"), { list: staffDB })
-            .catch(err => console.error("Staff sync failed", err));
-    }
+/* --- ROUTE CRUD --- */
+function saveRoute() {
+    const idx = document.getElementById('rIdx').value;
+    const name = document.getElementById('rName').value.trim();
+    if(!name) return;
+    if(idx !== "") routeMasterDB[idx] = { name }; else routeMasterDB.push({ name });
+    db.collection("data").doc("routeMaster").set({ list: routeMasterDB }).then(closeRouteModal);
+}
+function openRouteModal() { document.getElementById('routeModal').style.display="flex"; document.getElementById('rIdx').value=""; document.getElementById('rName').value=""; }
+function closeRouteModal() { document.getElementById('routeModal').style.display="none"; }
+function editRoute(i) { const r = routeMasterDB[i]; openRouteModal(); document.getElementById('rIdx').value=i; document.getElementById('rName').value=r.name; }
+function deleteRoute(i) { if(confirm("Delete Route?")) { routeMasterDB.splice(i,1); db.collection("data").doc("routeMaster").set({ list: routeMasterDB }); } }
 
-    function loadClients() {
-        onSnapshot(doc(db, "data", "clients"), (snapshot) => {
-            if(snapshot.exists) {
-                clientDB = snapshot.data().list || [];
-            }
-            syncWindow();
-            refreshUI();
-        });
-    }
-
-    // --- CLIENT CRUD ---
-    function openClientModal() {
-        document.getElementById('clientModal').style.display = "flex";
-        document.getElementById('cId').value = "";
-        document.getElementById('cName').value = "";
-        document.getElementById('cPhone').value = "";
-        document.getElementById('cPriceD').value = "45";
-        document.getElementById('cPriceA').value = "55";
-    }
-    function closeClientModal() { document.getElementById('clientModal').style.display = "none"; }
-    function saveClient() {
-        const idx = document.getElementById('cId').value;
-        const name = document.getElementById('cName').value.trim();
-        if(!name) return alert('Name required');
-        const phone = document.getElementById('cPhone').value;
-        const pd = Number(document.getElementById('cPriceD').value);
-        const pa = Number(document.getElementById('cPriceA').value);
-        
-        if(idx !== "") clientDB[idx] = { name, phone, pd, pa };
-        else clientDB.push({ name, phone, pd, pa });
-
-        setDoc(doc(db, "data", "clients"), { list: clientDB }).then(closeClientModal);
-    }
-    function editClient(idx) {
-        const c = clientDB[idx];
-        openClientModal();
-        document.getElementById('cId').value = idx;
-        document.getElementById('cName').value = c.name;
-        document.getElementById('cPhone').value = c.phone || "";
-        document.getElementById('cPriceD').value = c.pd || 45;
-        document.getElementById('cPriceA').value = c.pa || 55;
-    }
-    function deleteClient(idx) {
-        if(!confirm("Delete this client?")) return;
-        clientDB.splice(idx, 1);
-        setDoc(doc(db, "data", "clients"), { list: clientDB });
-    }
-    function renderClients() {
-        const tbody = document.getElementById('clientTable');
-        if(!tbody) return;
-        tbody.innerHTML = "";
-        const filter = document.getElementById('clientSearch')?.value.toUpperCase() || "";
-        clientDB.forEach((c, idx) => {
-            if(filter && !c.name.toUpperCase().includes(filter)) return;
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><span style="font-weight:700">${c.name}</span></td>
-                <td>${c.phone || '-'}</td>
-                <td><b>₹${c.pd || 45}</b> Dosa / <b>₹${c.pa || 55}</b> Appam</td>
-                <td>
-                    <button class="btn" style="color:var(--primary); padding:4px 8px" onclick="editClient(${idx})">Edit</button>
-                    <button class="btn" style="color:var(--danger); padding:4px 8px" onclick="deleteClient(${idx})">Del</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    // --- STAFF CRUD ---
-    function openStaffModal() {
-        document.getElementById('staffModal').style.display = "flex";
-        document.getElementById('sId').value = "";
-        document.getElementById('sName').value = "";
-    }
-    function closeStaffModal() { document.getElementById('staffModal').style.display = "none"; }
-    function saveStaff() {
-        const idx = document.getElementById('sId').value;
-        const name = document.getElementById('sName').value.trim();
-        if(!name) return;
-        const type = document.getElementById('sType').value;
-        const shop = document.getElementById('sShop').value;
-
-        if(idx !== "") staffDB[idx] = { name, type, shop };
-        else staffDB.push({ name, type, shop });
-        saveStaffs();
-        closeStaffModal();
-    }
-    function editStaff(idx) {
-        const s = staffDB[idx];
-        openStaffModal();
-        document.getElementById('sId').value = idx;
-        document.getElementById('sName').value = s.name;
-        document.getElementById('sType').value = s.type;
-        document.getElementById('sShop').value = s.shop;
-    }
-    function deleteStaff(idx) {
-        if(!confirm("Delete?")) return;
-        staffDB.splice(idx, 1);
-        saveStaffs();
-    }
-    function renderStaffs() {
-        const tbody = document.getElementById('staffTable');
-        if(!tbody) return;
-        tbody.innerHTML = "";
-        staffDB.forEach((s, idx) => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><span style="font-weight:700">${s.name}</span></td>
-                <td><span class="badge ${s.type==='PRODUCTION'?'bg-blue':'bg-orange'}">${s.type}</span></td>
-                <td>${s.shop}</td>
-                <td>
-                    <button class="btn" style="color:var(--primary); padding:4px 8px" onclick="editStaff(${idx})">Edit</button>
-                    <button class="btn" style="color:var(--danger); padding:4px 8px" onclick="deleteStaff(${idx})">Del</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    // --- ROUTE MASTER CRUD ---
-    function openRouteModal() {
-        document.getElementById('routeModal').style.display = "flex";
-        document.getElementById('rIdx').value = "";
-        document.getElementById('rName').value = "";
-    }
-    function closeRouteModal() { document.getElementById('routeModal').style.display = "none"; }
-    function saveRoute() {
-        const idx = document.getElementById('rIdx').value;
-        const name = document.getElementById('rName').value.trim();
-        if(!name) return alert('Name required');
-        
-        if(idx !== "") routeMasterDB[idx] = { name };
-        else routeMasterDB.push({ name });
-        
-        saveRouteMasterDB();
-        closeRouteModal();
-    }
-    function editRoute(idx) {
-        const r = routeMasterDB[idx];
-        openRouteModal();
-        document.getElementById('rIdx').value = idx;
-        document.getElementById('rName').value = r.name;
-    }
-    function deleteRoute(idx) {
-        if(!confirm("Delete route?")) return;
-        routeMasterDB.splice(idx, 1);
-        saveRouteMasterDB();
-    }
-    function renderRouteMaster() {
-        const tbody = document.getElementById('routeTable');
-        if(!tbody) return;
-        tbody.innerHTML = "";
-        routeMasterDB.forEach((r, idx) => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><span style="font-weight:700">${r.name}</span></td>
-                <td>
-                    <button class="btn" style="color:var(--primary); padding:4px 8px" onclick="editRoute(${idx})">Edit</button>
-                    <button class="btn" style="color:var(--danger); padding:4px 8px" onclick="deleteRoute(${idx})">Del</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    function refreshUI() {
-        // Run all renderers
-        if(typeof renderClients === 'function') renderClients();
-        if(typeof renderStaffs === 'function') renderStaffs();
-        if(typeof renderRouteMaster === 'function') renderRouteMaster();
-        if(typeof renderProduction === 'function') renderProduction();
-        if(typeof renderDelivery === 'function') renderDelivery();
-        if(typeof renderSales === 'function') renderSales();
-
-        const dayP = prodDB[currentDate] || { productions: [] };
-        const dayR = routeDB[currentDate] || { PACKET: { trips: [] }, LOOSE: { trips: [] } }; 
-
-        let totalP = 0;
-        if(dayP.productions) dayP.productions.forEach(p => totalP += Number(p.qty));
-        
-        let totalD = 0;
-        // Sum trips from both Packet and Loose
-        ['PACKET', 'LOOSE'].forEach(cat => {
-            if(dayR[cat] && dayR[cat].trips) {
-                dayR[cat].trips.forEach(t => totalD += (Number(t.dosa)||0) + (Number(t.appam)||0));
-            }
-        });
-
-        let staffSet = new Set();
-        if(dayP.productions) dayP.productions.forEach(p => staffSet.add(p.staff));
-
-        if(document.getElementById('kpiProd')) document.getElementById('kpiProd').innerText = totalP + " L";
-        if(document.getElementById('kpiDel')) document.getElementById('kpiDel').innerText = totalD + " L";
-        if(document.getElementById('kpiStaff')) document.getElementById('kpiStaff').innerText = staffSet.size;
-
-        renderChart(); 
-    }
-    
-    function renderChart() {
-        const ctx = document.getElementById('chartMain').getContext('2d');
-        if(window.myChart) window.myChart.destroy();
-        
-        let labels = [];
-        let dP = [];
-        let dD = [];
-
-        for(let i=6; i>=0; i--) {
-            let d = new Date(); d.setDate(d.getDate() - i);
-            let ds = d.toISOString().split('T')[0];
-            labels.push(ds.slice(5)); 
-            
-            let pVal = 0;
-            if(prodDB[ds] && prodDB[ds].productions) prodDB[ds].productions.forEach(x=>pVal+=Number(x.qty));
-            dP.push(pVal);
-
-            let dVal = 0;
-            if(routeDB[ds]) {
-                ['PACKET', 'LOOSE'].forEach(cat => {
-                    if(routeDB[ds][cat] && routeDB[ds][cat].trips) {
-                        routeDB[ds][cat].trips.forEach(x=>dVal+=(Number(x.dosa)||0)+(Number(x.appam)||0));
-                    }
-                });
-            }
-            dD.push(dVal);
-        }
-
-        window.myChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [
-                    { label:'Production', data:dP, backgroundColor:'#2563eb' },
-                    { label:'Delivery', data:dD, backgroundColor:'#10b981' }
-                ]
-            },
-            options: { responsive:true, maintainAspectRatio:false }
-        });
-    }
-
-    /* --- PRODUCTION LOGIC --- */
-    function renderProduction() {
-        const tbody = document.getElementById('prodTable');
-        const perfGrid = document.getElementById('staffPerfGrid');
-        const salaryGrid = document.getElementById('staffSalaryGrid');
-        const staffFilter = document.getElementById('fStaff');
-        if(!tbody || !perfGrid) return;
-        
-        tbody.innerHTML = "";
-        perfGrid.innerHTML = "";
-        if(salaryGrid) salaryGrid.innerHTML = "";
-        
-        const day = prodDB[currentDate];
-        if(!day || (!day.productions && !day.staffDeclarations)) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px; color:#cbd5e1">No Data for ${currentDate}</td></tr>`;
-            document.getElementById('uiProdTotal').innerText = "0 L";
-            document.getElementById('uiProdPacket').innerText = "0 L";
-            document.getElementById('uiProdLoose').innerText = "0 L";
-            document.getElementById('uiProdAvg').innerText = "0";
-            perfGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:20px; color:#94a3b8; font-size:12px">No staff activity recorded</div>`;
-            if(salaryGrid) salaryGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:20px; color:#94a3b8; font-size:12px">No production logs to calculate salary</div>`;
-            return;
-        }
-
-        const productions = day.productions || [];
-        const declarations = day.staffDeclarations || [];
-
-        // --- 1. POPULATE DYNAMIC FILTERS ---
-        if(staffFilter && staffFilter.options.length <= 1) {
-            const staffs = new Set([...productions.map(p => p.staff), ...declarations.map(d => d.staff)]);
-            [...staffs].sort().forEach(s => staffFilter.add(new Option(s, s)));
-        }
-
-        const mainHubFilter = (document.getElementById('prodFilterShop')?.value || "ALL").toUpperCase();
-        const fBatch = document.getElementById('fBatch')?.value.toUpperCase() || "";
-        const fShop = document.getElementById('fShop')?.value.toUpperCase() || "ALL";
-        const fStaff = document.getElementById('fStaff')?.value.toUpperCase() || "ALL";
-        const fProd = document.getElementById('fProd')?.value.toUpperCase() || "ALL";
-        const fType = document.getElementById('fType')?.value.toUpperCase() || "ALL";
-        
-        let total = 0, packet = 0, loose = 0, batchCount = 0;
-        let staffStats = {}; // { Name: { packet:0, loose:0, total:0, batches: Set } }
-
-        // Process Productions
-        productions.forEach(p => {
-            if(mainHubFilter !== "ALL" && p.shop.toUpperCase() !== mainHubFilter) return;
-
-            const qty = Number(p.qty) || 0;
-            total += qty;
-            batchCount++;
-            if(p.type === 'PACKET') packet += qty; else loose += qty;
-
-            if(!staffStats[p.staff]) staffStats[p.staff] = { packet:0, loose:0, total:0, batches: new Set() };
-            staffStats[p.staff].total += qty;
-            if(p.type === 'PACKET') staffStats[p.staff].packet += qty; else staffStats[p.staff].loose += qty;
-            if(p.bn) staffStats[p.staff].batches.add(p.bn);
-
-            if(fBatch && !p.bn?.toUpperCase().includes(fBatch)) return;
-            if(fShop !== "ALL" && p.shop.toUpperCase() !== fShop) return;
-            if(fStaff !== "ALL" && p.staff.toUpperCase() !== fStaff) return;
-            if(fProd !== "ALL" && p.product.toUpperCase() !== fProd) return;
-            if(fType !== "ALL" && p.type.toUpperCase() !== fType) return;
-
-            const bClr = p.bn ? (window.getBatchColor ? window.getBatchColor(p.bn) : {bg:'#e0f2fe', text:'#0369a1'}) : {bg:'#f1f5f9', text:'#64748b'};
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><span class="badge" style="background:${bClr.bg}; color:${bClr.text}">${p.bn || '-'}</span></td>
-                <td><span style="font-weight:700; font-size:11px">${p.shop}</span></td>
-                <td>${p.staff}</td>
-                <td><span style="font-weight:700">${p.product}</span></td>
-                <td><span class="badge ${p.type==='PACKET'?'bg-blue':'bg-orange'}">${p.type}</span></td>
-                <td style="font-weight:700; text-align:right">${p.qty} L</td>
-                <td>
-                    <button class="btn" style="color:var(--primary); padding:4px 8px" onclick="editProd('${p.id}')">Edit</button>
-                    <button class="btn" style="color:var(--danger); padding:4px 8px" onclick="deleteProd('${p.id}')">Del</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-
-        document.getElementById('uiProdTotal').innerText = total + " L";
-        document.getElementById('uiProdPacket').innerText = packet + " L";
-        document.getElementById('uiProdLoose').innerText = loose + " L";
-        const avg = batchCount > 0 ? (total / batchCount).toFixed(1) : "0";
-        document.getElementById('uiProdAvg').innerText = avg;
-
-        // Process Salary & Performance (Union of Staff)
-        const allStaff = new Set([...Object.keys(staffStats), ...declarations.map(d => d.staff)]);
-        const sortedStaff = [...allStaff].sort();
-
-        if(sortedStaff.length === 0) {
-            perfGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:20px; color:#94a3b8; font-size:12px">No staff matches the current filter</div>`;
-        } else {
-            sortedStaff.forEach(s => {
-                const stat = staffStats[s] || { packet:0, loose:0, total:0, batches: new Set() };
-                const decl = declarations.find(d => d.staff === s); // Assuming one declaration per staff for simplicity or take the latest
-                
-                // PERFORMANCE CARD
-                if(stat.total > 0) {
-                    perfGrid.innerHTML += `
-                        <div class="staff-card">
-                            <div class="name"><span>${s}</span> <span style="color:var(--primary)">${stat.total}L</span></div>
-                            <div class="staff-stat"><span>Packet Mode</span> <span style="color:var(--primary)">${stat.packet}L</span></div>
-                            <div class="staff-stat"><span>Loose Mode</span> <span style="color:#f59e0b">${stat.loose}L</span></div>
-                        </div>
-                    `;
-                }
-
-                // SALARY CARD
-                if(salaryGrid) {
-                    let salary = 0;
-                    let batchCountDisplay = 0;
-                    let paidBatches = 0;
-                    let statusBadge = "";
-                    let rowClass = "";
-
-                    if (decl && decl.isAbsent) {
-                        statusBadge = `<span class="badge" style="background:#fee2e2; color:var(--danger)">ABSENT</span>`;
-                        rowClass = "opacity:0.6";
-                    } else {
-                        // Priority: Declared Batches > Production Log Batches
-                        const realBatches = stat.batches.size;
-                        const declaredBatches = decl ? decl.declared : null;
-                        
-                        const finalBatches = (declaredBatches !== null && declaredBatches !== undefined) ? declaredBatches : realBatches;
-                        
-                        paidBatches = Math.max(0, finalBatches - 4);
-                        salary = paidBatches * 75;
-                        batchCountDisplay = finalBatches;
-                        
-                        statusBadge = declaredBatches !== null 
-                            ? `<span class="badge" style="background:#dcfce7; color:var(--success)">VERIFIED</span>`
-                            : `<span class="badge" style="background:#f1f5f9; color:var(--text-light)">ESTIMATED</span>`;
-                    }
-
-                    salaryGrid.innerHTML += `
-                        <div class="salary-card" style="${rowClass}">
-                            <div class="s-name"><span>${s}</span> ${statusBadge}</div>
-                            <div class="s-row"><span>Total Batches</span> <span class="s-val">${batchCountDisplay} Units</span></div>
-                            <div class="s-row"><span>Paid Batches</span> <span class="s-val">${paidBatches} Units</span></div>
-                            <div class="s-row"><span>Volume</span> <span class="s-val">${stat.total} Liters</span></div>
-                            <div class="s-row s-total"><span>Earnings</span> <span>₹${salary.toLocaleString()}</span></div>
-                        </div>
-                    `;
-                }
-            });
+/* --- RENDERERS --- */
+function renderHome() {
+    let tP = 0, tD = 0;
+    const day = erpDB[currentDate];
+    if(day && day.productions) day.productions.forEach(p => tP += Number(p.qty)||0);
+    const rDay = routeDaysDB[currentDate];
+    if(rDay) { ['PACKET','LOOSE'].forEach(c => { if(rDay[c] && rDay[c].trips) rDay[c].trips.forEach(t => tD += (Number(t.dosa)||0) + (Number(t.appam)||0)); }); }
+    document.getElementById('kpiProd').innerText = tP + " L";
+    document.getElementById('kpiDel').innerText = tD + " L";
+    document.getElementById('kpiStaff').innerText = staffDB.length;
+    document.getElementById('kpiRoutes').innerText = routeMasterDB.length;
+    if(typeof Chart !== 'undefined') {
+        const ctx = document.getElementById('chartMain');
+        if(ctx) {
+            if(mainChart) mainChart.destroy();
+            mainChart = new Chart(ctx, { type:'bar', data: { labels:['Prod','Del'], datasets:[{ label:'Volume (L)', data:[tP, tD], backgroundColor:['#2563eb','#10b981'] }] }, options: { maintainAspectRatio:false } });
         }
     }
+}
 
-    // Reset staff options when date changes
-    function resetTableFilters() {
-        const sf = document.getElementById('fStaff');
-        if(sf) sf.innerHTML = '<option value="ALL">All Staff</option>';
-        ['fBatch', 'fShop', 'fProd', 'fType'].forEach(id => {
-            const el = document.getElementById(id);
-            if(el) el.value = (el.tagName === 'SELECT') ? 'ALL' : '';
+function renderStaffs() {
+    const tb = document.getElementById('staffTable'); if(!tb) return;
+    tb.innerHTML = "";
+    staffDB.forEach((s, i) => { tb.innerHTML += `<tr><td>${s.name}</td><td>${s.type}</td><td>${s.shop}</td><td><button onclick="editStaff(${i})">Edit</button> <button onclick="deleteStaff(${i})">Del</button></td></tr>`; });
+}
+
+function renderProduction() {
+    const tb = document.getElementById('prodTable'); if(!tb) return;
+    tb.innerHTML = "";
+    const day = erpDB[currentDate];
+    if(day && day.productions) day.productions.forEach((p, i) => {
+        tb.innerHTML += `<tr><td>${i+1}</td><td>${p.shop}</td><td>${p.staff}</td><td>${p.product}</td><td>${p.type}</td><td style="text-align:right">${p.qty}</td></tr>`;
+    });
+}
+
+function renderDelivery() {
+    const g = document.getElementById('deliveryGrid'); if(!g) return;
+    g.innerHTML = "";
+    const rDay = routeDaysDB[currentDate];
+    if(!rDay) { g.innerHTML = "No route data for this date"; return; }
+    let dr = {};
+    ['PACKET','LOOSE'].forEach(c => {
+        if(rDay[c] && rDay[c].trips) rDay[c].trips.forEach(t => {
+            if(!dr[t.driver]) dr[t.driver] = { d:0, a:0, t:0 }; dr[t.driver].d += Number(t.dosa)||0; dr[t.driver].a += Number(t.appam)||0; dr[t.driver].t++;
         });
-    }
+    });
+    Object.keys(dr).forEach(n => {
+        g.innerHTML += `<div class="driver-card"><div class="driver-head"><span>${n}</span><span>${dr[n].t} Trips</span></div><div class="d-stat"><div class="d-stat-item">Dosa: ${dr[n].d}</div><div class="d-stat-item">Appam: ${dr[n].a}</div></div></div>`;
+    });
+}
 
-    function openProdModal() {
-        document.getElementById('prodModal').style.display = "flex";
-        document.getElementById('pId').value = "";
-        document.getElementById('pQty').value = "";
-    }
-    function closeProdModal() { document.getElementById('prodModal').style.display = "none"; }
+function renderClients() {
+    const tb = document.getElementById('clientTable'); if(!tb) return;
+    tb.innerHTML = "";
+    clientDB.forEach((c, i) => { tb.innerHTML += `<tr><td>${c.name}</td><td>${c.phone||'-'}</td><td>${c.pd}/${c.pa}</td><td><button onclick="editClient(${i})">Edit</button> <button onclick="deleteClient(${i})">Del</button></td></tr>`; });
+}
 
-    function updateModalStaff() {
-        const shop = document.getElementById('pShop')?.value;
-        const sel = document.getElementById('pStaff');
-        const driverSel = document.getElementById('dDriver');
+function renderRouteMaster() {
+    const tb = document.getElementById('routeTable'); if(!tb) return;
+    tb.innerHTML = "";
+    routeMasterDB.forEach((r, i) => { tb.innerHTML += `<tr><td>${r.name}</td><td><button onclick="editRoute(${i})">Edit</button> <button onclick="deleteRoute(${i})">Del</button></td></tr>`; });
+}
 
-        if(sel) {
-            sel.innerHTML = "";
-            const filtered = staffDB.filter(x => x.type === 'PRODUCTION' && (x.shop === shop || x.shop === 'Common'));
-            filtered.forEach(s => sel.add(new Option(s.name, s.name)));
-        }
-
-        if(driverSel) {
-            const currentDr = driverSel.value;
-            driverSel.innerHTML = "";
-            staffDB.filter(x => x.type === 'DELIVERY').forEach(s => driverSel.add(new Option(s.name, s.name)));
-            if(currentDr) driverSel.value = currentDr;
-        }
-    }
-
-    function editProd(id) {
-        const p = prodDB[currentDate].productions.find(x => x.id === id);
-        if(!p) return;
-        openProdModal();
-        document.getElementById('pId').value = id;
-        document.getElementById('pShop').value = p.shop; 
-        updateModalStaff();
-        document.getElementById('pStaff').value = p.staff;
-        document.getElementById('pProd').value = p.product;
-        document.getElementById('pType').value = p.type;
-        document.getElementById('pQty').value = p.qty;
-    }
-
-    function saveProduction() {
-        const id = document.getElementById('pId').value;
-        const shop = document.getElementById('pShop').value;
-        const staff = document.getElementById('pStaff').value;
-        const prod = document.getElementById('pProd').value;
-        const type = document.getElementById('pType').value;
-        const qty = Number(document.getElementById('pQty').value);
-
-        if(qty <= 0) return alert("Invalid Qty");
-
-        if(!prodDB[currentDate]) prodDB[currentDate] = { productions:[], deliveries:[], returns:[] }; 
-
-        if(id) {
-            const idx = prodDB[currentDate].productions.findIndex(x => x.id === id);
-            if(idx !== -1) {
-                const old = prodDB[currentDate].productions[idx];
-                prodDB[currentDate].productions[idx] = { ...old, shop, staff, product:prod, type, qty };
-            }
-        } else {
-            let bnNum = 1;
-            prodDB[currentDate].productions.forEach(x => { if(x.shop===shop && x.product===prod) bnNum++; });
-            const bn = `${shop[0]}${prod[0]}${bnNum}`;
-            const newId = Date.now().toString(36);
-            prodDB[currentDate].productions.push({ id:newId, shop, staff, product:prod, type, qty, bn });
-        }
-
-        setDoc(doc(db, "data", "erp"), prodDB)
-            .then(() => {
-                console.log("Production Saved to Firestore");
-                closeProdModal();
-            })
-            .catch(err => {
-                console.error("Prod Save Error", err);
-                alert("Error: Production record not saved. Check rules.");
-            });
-    }
-
-    function deleteProd(id) {
-        if(!confirm("Delete?")) return;
-        prodDB[currentDate].productions = prodDB[currentDate].productions.filter(x => x.id !== id);
-        setDoc(doc(db, "data", "erp"), prodDB);
-    }
-
-    function renderDelivery() {
-        const grid = document.getElementById('deliveryGrid');
-        if(!grid) return;
-        grid.innerHTML = "";
-        
-        const rDay = routeDB[currentDate];
-        if(!rDay) {
-            grid.innerHTML = `<div style="grid-column:span 2; text-align:center; padding:40px; color:#cbd5e1">No Route Data for ${currentDate}</div>`;
-            return;
-        }
-
-        let drivers = {};
-        // Aggregate trips from both Packet and Loose
-        ['PACKET', 'LOOSE'].forEach(cat => {
-            if(rDay[cat] && rDay[cat].trips) {
-                rDay[cat].trips.forEach(t => {
-                    if(!drivers[t.driver]) drivers[t.driver] = { loadedD:0, loadedA:0, trips:0 };
-                    drivers[t.driver].loadedD += Number(t.dosa);
-                    drivers[t.driver].loadedA += Number(t.appam);
-                    drivers[t.driver].trips++;
+function renderSales() {
+    const tb = document.getElementById('salesTable'); if(!tb) return;
+    tb.innerHTML = "";
+    let sMap = {};
+    Object.keys(routeDaysDB).forEach(d => {
+        const rDay = routeDaysDB[d];
+        ['PACKET','LOOSE'].forEach(c => {
+            if(rDay[c] && rDay[c].shops) {
+                Object.keys(rDay[c].shops).forEach(sn => {
+                    const s = rDay[c].shops[sn]; if(!sMap[sn]) sMap[sn] = { s:0, p:0 };
+                    const cl = clientDB.find(x=>x.name===sn); const pD = cl?cl.pd:45; const pA = cl?cl.pa:55;
+                    const val = (Number(s.dosa.sale)||0 + Number(s.dosa.cr)||0)*pD + (Number(s.appam.sale)||0 + Number(s.appam.cr)||0)*pA;
+                    sMap[sn].s += val; sMap[sn].p += (Number(s.cashReceived)||0) + (Number(s.gpayReceived)||0);
                 });
             }
         });
-        
-        const dNames = Object.keys(drivers).sort();
-        if(dNames.length === 0) {
-            grid.innerHTML = `<div style="grid-column:span 2; text-align:center; padding:40px; color:#cbd5e1">No Active Drivers for ${currentDate}</div>`;
-            return;
-        }
+    });
+    Object.keys(sMap).forEach(n => { tb.innerHTML += `<tr><td>${n}</td><td>₹${sMap[n].s}</td><td>₹${sMap[n].p}</td><td style="text-align:right">₹${sMap[n].s - sMap[n].p}</td></tr>`; });
+}
 
-        dNames.forEach(dKey => {
-            const d = drivers[dKey];
-            grid.innerHTML += `
-            <div class="driver-card">
-                <div class="driver-head">
-                    <span>${dKey}</span>
-                    <span class="badge bg-blue">${d.trips} Trips</span>
-                </div>
-                <div class="d-stat">
-                    <div class="d-stat-item"><div class="d-stat-lbl">Dosa Load</div><div class="d-stat-val">${d.loadedD}</div></div>
-                    <div class="d-stat-item"><div class="d-stat-lbl">Appam Load</div><div class="d-stat-val">${d.loadedA}</div></div>
-                    <div class="d-stat-item"><div class="d-stat-lbl">Total</div><div class="d-stat-val">${d.loadedD+d.loadedA}</div></div>
-                </div>
-                <div class="client-list">
-                    <div style="font-size:11px; font-weight:700; color:#94a3b8; margin-bottom:8px">DAILY SALES ACTIVITY</div>
-                    ${generateShopSalesHTML(rDay, dKey)}
-                </div>
-            </div>`;
-        });
-
-        // Render Raw Trips Table
-        const delTable = document.getElementById('delTable');
-        if(delTable) {
-            delTable.innerHTML = "";
-            ['PACKET','LOOSE'].forEach(cat => {
-                if(rDay[cat] && rDay[cat].trips) {
-                    rDay[cat].trips.forEach((t, tidx) => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td><span style="font-weight:700">${t.driver}</span> <small>(${t.hub || '?'})</small></td>
-                            <td><span class="badge ${cat==='PACKET'?'bg-blue':'bg-orange'}">${cat}</span></td>
-                            <td style="text-align:right">${t.dosa || 0}</td>
-                            <td style="text-align:right">${t.appam || 0}</td>
-                            <td>
-                                <button class="btn" style="color:var(--primary); padding:4px 8px" onclick="editDel('${cat}', ${tidx})">Edit</button>
-                                <button class="btn" style="color:var(--danger); padding:4px 8px" onclick="deleteDel('${cat}', ${tidx})">Del</button>
-                            </td>
-                        `;
-                        delTable.appendChild(tr);
-                    });
-                }
-            });
-        }
-    }
-
-    /* --- DELIVERY CRUD LOGIC --- */
-    function openDelModal() {
-        document.getElementById('delModal').style.display = "flex";
-        document.getElementById('dId').value = "";
-        document.getElementById('dDosa').value = "";
-        document.getElementById('dAppam').value = "";
-        updateModalStaff();
-    }
-    function closeDelModal() { document.getElementById('delModal').style.display = "none"; }
-
-    function editDel(cat, idx) {
-        const t = routeDB[currentDate][cat].trips[idx];
-        if(!t) return;
-        openDelModal();
-        document.getElementById('dId').value = idx;
-        document.getElementById('dTypeOrig').value = cat;
-        document.getElementById('dDriver').value = t.driver;
-        document.getElementById('dType').value = cat;
-        document.getElementById('dHub').value = t.hub || "Nettor";
-        document.getElementById('dDosa').value = t.dosa;
-        document.getElementById('dAppam').value = t.appam;
-    }
-
-    function saveDelivery() {
-        const idx = document.getElementById('dId').value;
-        const typeOrig = document.getElementById('dTypeOrig').value;
-        const driver = document.getElementById('dDriver').value;
-        const type = document.getElementById('dType').value;
-        const hub = document.getElementById('dHub').value;
-        const dosa = Number(document.getElementById('dDosa').value);
-        const appam = Number(document.getElementById('dAppam').value);
-
-        if(!routeDB[currentDate]) {
-            routeDB[currentDate] = getEmptyRouteDay();
-        }
-        routeDB[currentDate] = normalizeRouteDay(routeDB[currentDate]);
-        if(!routeDB[currentDate][type]) routeDB[currentDate][type] = getEmptyRouteCategory();
-
-        const tripObj = { driver, hub, dosa, appam };
-
-        if(idx !== "") {
-            // If type changed, remove from old, push to new
-            if(type !== typeOrig) {
-                routeDB[currentDate][typeOrig].trips.splice(idx, 1);
-                routeDB[currentDate][type].trips.push(tripObj);
-            } else {
-                routeDB[currentDate][type].trips[idx] = tripObj;
-            }
-        } else {
-            routeDB[currentDate][type].trips.push(tripObj);
-        }
-
-        saveRouteDay(currentDate)
-            .then(() => closeDelModal())
-            .catch(err => alert("Error saving delivery: " + err.message));
-    }
-
-    function deleteDel(cat, idx) {
-        if(!confirm("Delete this trip?")) return;
-        routeDB[currentDate][cat].trips.splice(idx, 1);
-        saveRouteDay(currentDate);
-    }
-
-    function generateShopSalesHTML(rDay, driverName) {
-        let html = "";
-        const shopActivity = {}; // { shopName: { dosa:0, appam:0, cash:0, cats:[] } }
-
-        ['PACKET', 'LOOSE'].forEach(cat => {
-            const catData = rDay[cat];
-            if(!catData || !catData.shops) return;
-
-            Object.keys(catData.shops).forEach(sName => {
-                const s = catData.shops[sName];
-                // Check if this shop belongs to this driver
-                if(s.driver !== driverName) return;
-
-                const dSale = Number(s.dosa.sale)||0;
-                const dCr = Number(s.dosa.cr)||0;
-                const aSale = Number(s.appam.sale)||0;
-                const aCr = Number(s.appam.cr)||0;
-                
-                const totalD = dSale + dCr;
-                const totalA = aSale + aCr;
-
-                if(totalD > 0 || totalA > 0 || s.cashReceived || s.gpayReceived) {
-                    if(!shopActivity[sName]) shopActivity[sName] = { dosa:0, appam:0, cash:0, cats:[] };
-                    shopActivity[sName].dosa += totalD;
-                    shopActivity[sName].appam += totalA;
-                    shopActivity[sName].cash += (Number(s.cashReceived)||0) + (Number(s.gpayReceived)||0);
-                    if(!shopActivity[sName].cats.includes(cat)) shopActivity[sName].cats.push(cat);
-                }
-            });
-        });
-
-        const sortedShops = Object.keys(shopActivity).sort();
-        sortedShops.forEach(sName => {
-            const act = shopActivity[sName];
-            const catsDisplay = act.cats.map(c => c[0]).join("/"); // P/L
-            html += `
-            <div class="client-row">
-                <div style="display:flex; flex-direction:column">
-                    <span style="font-weight:700">${sName} <small style="color:#94a3b8; font-weight:400">[${catsDisplay}]</small></span>
-                    <span style="font-size:10px; color:#64748b">${act.dosa}D / ${act.appam}A</span>
-                </div>
-                <div style="text-align:right">
-                    <b style="color:#10b981">₹${act.cash}</b>
-                </div>
-            </div>`;
-        });
-
-        return html || '<div style="font-size:11px; color:#cbd5e1; text-align:center; padding:10px">No sales records</div>';
-    }
-
-    /* --- SALES ANALYTICS LOGIC --- */
-    let salesChart = null;
-
-    function getPrice(shop, type) {
-        const c = clientDB.find(x => x.name === shop);
-        if(c) return type === 'dosa' ? Number(c.pd) : Number(c.pa);
-        return type === 'dosa' ? 45 : 55;
-    }
-
-    function renderSales() {
-        const period = parseInt(document.getElementById('salesPeriod')?.value || "30");
-        const dates = Object.keys(routeDB).sort();
-        const todayStr = currentDate;
-        
-        let clientSummary = {}; // { name: { sold: 0, paid: 0 } }
-        let driverToday = {}; // { driver: 0 }
-        let dailyRev = []; // [ { date, rev } ]
-
-        // Get past N days for the chart
-        const lastNDates = [];
-        for(let i=period-1; i>=0; i--) {
-            let d = new Date();
-            d.setDate(d.getDate() - i);
-            lastNDates.push(d.toISOString().split('T')[0]);
-        }
-
-        // Process ALL available historical data for accurate client balances
-        dates.forEach(d => {
-            ['PACKET','LOOSE'].forEach(cat => {
-                const dayData = routeDB[d]?.[cat];
-                if(!dayData || !dayData.shops) return;
-
-                Object.keys(dayData.shops).forEach(sName => {
-                    const s = dayData.shops[sName];
-                    if(!clientSummary[sName]) clientSummary[sName] = { sold: 0, paid: 0 };
-                    
-                    const pD = getPrice(sName, 'dosa');
-                    const pA = getPrice(sName, 'appam');
-                    const soldVal = ((Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0))*pD + 
-                                    ((Number(s.appam.sale)||0) + (Number(s.appam.cr)||0))*pA;
-                    clientSummary[sName].sold += soldVal;
-                    clientSummary[sName].paid += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
-
-                    // Track driver collections for the CURRENT SELECTED DATE
-                    if(d === todayStr) {
-                        const dr = s.driver || "Undefined";
-                        if(!driverToday[dr]) driverToday[dr] = 0;
-                        driverToday[dr] += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
-                    }
-                });
-            });
-        });
-
-        // Compute Daily Revenue for the Trend Chart
-        lastNDates.forEach(d => {
-            let rev = 0;
-            ['PACKET','LOOSE'].forEach(cat => {
-                const dayData = routeDB[d]?.[cat];
-                if(!dayData || !dayData.shops) return;
-                Object.keys(dayData.shops).forEach(sName => {
-                    const s = dayData.shops[sName];
-                    const pD = getPrice(sName, 'dosa');
-                    const pA = getPrice(sName, 'appam');
-                    rev += ((Number(s.dosa.sale)||0) + (Number(s.dosa.cr)||0))*pD + 
-                           ((Number(s.appam.sale)||0) + (Number(s.appam.cr)||0))*pA;
-                });
-            });
-            dailyRev.push({ date: d, rev: rev });
-        });
-
-        // Update High-Level KPIs
-        let totalRev = 0, totalPaid = 0, active = 0;
-        Object.values(clientSummary).forEach(c => {
-            totalRev += c.sold;
-            totalPaid += c.paid;
-            if(c.sold > 0 || c.paid > 0) active++;
-        });
-
-        if(document.getElementById('salesTotalRev')) document.getElementById('salesTotalRev').innerText = "₹" + totalRev.toLocaleString();
-        if(document.getElementById('salesTotalCash')) document.getElementById('salesTotalCash').innerText = "₹" + totalPaid.toLocaleString();
-        if(document.getElementById('salesTotalOut')) document.getElementById('salesTotalOut').innerText = "₹" + (totalRev - totalPaid).toLocaleString();
-        if(document.getElementById('salesActiveClients')) document.getElementById('salesActiveClients').innerText = active;
-
-        // Render Driver Collection List
-        const dList = document.getElementById('salesDriverList');
-        if(dList) {
-            dList.innerHTML = "";
-            const sortedDrivers = Object.keys(driverToday).sort();
-            sortedDrivers.forEach(dr => {
-                if(driverToday[dr] === 0) return;
-                dList.innerHTML += `
-                    <div class="driver-row">
-                        <span style="font-weight:600">${dr}</span>
-                        <span style="font-weight:800; color:var(--primary)">₹${driverToday[dr].toLocaleString()}</span>
-                    </div>
-                `;
-            });
-            if(dList.innerHTML === "") dList.innerHTML = `<div style="text-align:center; padding:40px 20px; color:#94a3b8; font-size:12px">No collections recorded for ${todayStr}</div>`;
-        }
-
-        // Render Client Master Statement Table
-        const cTable = document.getElementById('salesClientTable');
-        if(cTable) {
-            cTable.innerHTML = "";
-            // Sort by Balance Due (Descending)
-            const sortedClients = Object.keys(clientSummary).sort((a,b) => (clientSummary[b].sold - clientSummary[b].paid) - (clientSummary[a].sold - clientSummary[a].paid));
-            
-            sortedClients.forEach(name => {
-                const stats = clientSummary[name];
-                const bal = stats.sold - stats.paid;
-                if(stats.sold === 0 && stats.paid === 0) return;
-                
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><span style="font-weight:700">${name}</span></td>
-                    <td>₹${stats.sold.toLocaleString()}</td>
-                    <td>₹${stats.paid.toLocaleString()}</td>
-                    <td style="text-align:right; font-weight:800; color:${bal > 0 ? 'var(--danger)' : 'var(--success)'}">₹${bal.toLocaleString()}</td>
-                `;
-                cTable.appendChild(tr);
-            });
-        }
-
-        // Render Revenue Trend Chart
-        const chartCanvas = document.getElementById('salesChart');
-        if(chartCanvas) {
-            if(salesChart) salesChart.destroy();
-            const ctx = chartCanvas.getContext('2d');
-            salesChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: dailyRev.map(x => x.date.split('-').slice(1).join('/')),
-                    datasets: [{
-                        label: 'Revenue',
-                        data: dailyRev.map(x => x.rev),
-                        borderColor: '#2563eb',
-                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                        fill: true,
-                        tension: 0.4,
-                        borderWidth: 3,
-                        pointRadius: 0,
-                        pointHoverRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { 
-                        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } },
-                        x: { grid: { display: false }, ticks: { font: { size: 10 } } }
-                    },
-                    interaction: { intersect: false, mode: 'index' }
-                }
-            });
-        }
-    }
-
+loadData();
+document.getElementById('prodDate').value = currentDate;
+document.getElementById('delDate').value = currentDate;
 </script>
 </body>
 </html>

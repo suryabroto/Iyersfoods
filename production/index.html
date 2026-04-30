@@ -537,6 +537,7 @@ import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs } from "../fir
 /* --- CONFIG --- */
 const SHOPS = ["Nettor", "Kannankulangara", "Vadakkekotta"];
 let STAFF = { Nettor:[], Kannankulangara:[], Vadakkekotta:[] };
+let DISPATCH_STAFF = { Nettor:[], Kannankulangara:[], Vadakkekotta:[] };
 const DB_KEY = "IYERSFOOD_ERP_V4_0"; 
 const CLIENT_DB_KEY = "IYERS_CLIENT_DB_V4";
 const empty = `<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;font-size:12px;">No records for this selection</td></tr>`;
@@ -593,7 +594,7 @@ function switchSection(sectionId) {
 
 function resetAllData() {
     if (confirm("⚠️ CAUTION: RESET ALL DATA?\n\nThis will permanently delete all logs and production records.\n\nAre you sure you want to proceed?")) {
-        setDoc(doc(db, "data", "erp"), {})
+        setDoc(doc(db, "data", "erp_v4"), {})
             .then(() => alert("Daily logs have been cleared on Firestore."))
             .catch(err => alert("Error resetting data: " + err.message));
     }
@@ -645,6 +646,7 @@ function loadStaff() {
             const list = snapshot.data().list || [];
             // Group by role
             let newProd = { Nettor:[], Kannankulangara:[], Vadakkekotta:[] };
+            let newDisp = { Nettor:[], Kannankulangara:[], Vadakkekotta:[] };
             let newDrivers = [];
             
             list.forEach(s => {
@@ -654,12 +656,19 @@ function loadStaff() {
                     } else if(newProd[s.shop]) {
                         newProd[s.shop].push(s.name);
                     }
+                } else if(s.type === 'DISPATCH') {
+                    if(s.shop === 'Common') {
+                        SHOPS.forEach(sh => newDisp[sh].push(s.name));
+                    } else if(newDisp[s.shop]) {
+                        newDisp[s.shop].push(s.name);
+                    }
                 } else if(s.type === 'DELIVERY') {
                     newDrivers.push(s.name);
                 }
             });
             
             STAFF = newProd;
+            DISPATCH_STAFF = newDisp;
             window.DRIVERS = newDrivers.sort();
             syncShopUI();
             syncDecUI();
@@ -935,7 +944,8 @@ function setProductContext(prod) {
         b.classList.remove('active');
         if(b.dataset.prod === prod) b.classList.add('active');
     });
-    document.getElementById('staffDetailsCard').style.display = 'none';
+    const details = document.getElementById('staffDetailsCard');
+    if(details) details.style.display = 'none';
     render();
 }
 
@@ -952,15 +962,30 @@ function syncShopUI() {
     if(STAFF[shop]) {
         STAFF[shop].forEach(s => { 
             activeStaff.add(new Option(s, s)); 
-            delProdStaff.add(new Option(s, s)); 
             retStaff.add(new Option(s, s));
         });
     }
+
+    // Populate From (Maker) with Production Staff
+    if(STAFF[shop]) {
+        STAFF[shop].forEach(s => {
+            delProdStaff.add(new Option(s, s));
+        });
+    }
     
-    // Populate Drivers into Dispatch and Returns
+    // Populate Drivers and Dispatchers into Dispatch list
+    const dispatchTargets = [...(window.DRIVERS || [])];
+    if(DISPATCH_STAFF[shop]) {
+        DISPATCH_STAFF[shop].forEach(s => { if(!dispatchTargets.includes(s)) dispatchTargets.push(s); });
+    }
+    
+    dispatchTargets.sort().forEach(d => {
+        delStaff.add(new Option(d, d));
+    });
+
+    // Populate Drivers into Returns list
     if(window.DRIVERS) {
         window.DRIVERS.forEach(d => {
-            delStaff.add(new Option(d, d));
             retStaff.add(new Option(d, d));
         });
     }
