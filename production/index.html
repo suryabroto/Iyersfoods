@@ -441,17 +441,14 @@
                         </label>
                     </div>
 
-                    <div class="form-group" id="retShopWrapper">
-                        <label>Shop</label>
-                        <select id="retShop"></select>
+                    <div class="form-group">
+                        <label>Received By</label>
+                        <select id="retStaff"></select>
                     </div>
 
                     <div class="form-group">
-                        <label>Reported By</label>
-                        <select id="retStaff">
-                            <option value="InHouse">In House (Factory)</option>
-                            <option>Anand</option><option>Renjith</option><option>Aswin</option><option>Sanja</option><option>Retail</option>
-                        </select>
+                        <label>Returned By</label>
+                        <select id="retDelStaff"></select>
                     </div>
                     
                     <div class="form-group" id="retClientWrapper">
@@ -471,7 +468,7 @@
                     <h3 style="margin:20px 0 10px 4px; font-size:12px; color:var(--danger)">Returns & Damages Log</h3>
                     <div class="table-wrapper">
                         <table>
-                            <thead><tr><th>Action</th><th>Item</th><th>Client</th><th></th><th style="text-align:right">Qty</th><th style="text-align:right"></th></tr></thead>
+                            <thead><tr><th>Action</th><th>Item</th><th>Client</th><th>RecBy</th><th>RetBy</th><th style="text-align:right">Qty</th><th style="text-align:right"></th></tr></thead>
                             <tbody id="retLog"></tbody>
                         </table>
                     </div>
@@ -602,14 +599,13 @@ function resetAllData() {
 
 // Function to handle App Initialization
 // Module-level element references
-let activeShop, workDate, retShop, activeStaff, delProdStaff, delStaff, prodQty, delQty, retQty, decCount, decStaff;
+let activeShop, workDate, activeStaff, delProdStaff, delStaff, prodQty, delQty, retQty, decCount, decStaff, retStaff, retDelStaff;
 
 function initApp() {
     loadDataFromStorage();
     
     activeShop = document.getElementById('activeShop');
     workDate = document.getElementById('workDate');
-    retShop = document.getElementById('retShop');
     activeStaff = document.getElementById('activeStaff');
     delProdStaff = document.getElementById('delProdStaff');
     delStaff = document.getElementById('delStaff');
@@ -618,6 +614,8 @@ function initApp() {
     retQty = document.getElementById('retQty');
     decCount = document.getElementById('decCount');
     decStaff = document.getElementById('decStaff');
+    retStaff = document.getElementById('retStaff');
+    retDelStaff = document.getElementById('retDelStaff');
 
     if (activeShop) {
         activeShop.innerHTML = `<option value="ALL">All Shops</option>` + SHOPS.map(s=>`<option value="${s}">${s}</option>`).join("");
@@ -630,9 +628,7 @@ function initApp() {
         switchDate(workDate.value);
     }
     
-    if (retShop) {
-        retShop.innerHTML = SHOPS.map(s=>`<option value="${s}">${s}</option>`).join("");
-    }
+    // retShop initialization removed
     
     loadClients();
     loadStaff();
@@ -954,10 +950,13 @@ function syncShopUI() {
     activeStaff.innerHTML = ""; 
     delProdStaff.innerHTML = "";
     delStaff.innerHTML = "";
+    
+    // Populate Returns list
     retStaff.innerHTML = '<option value="InHouse">In House (Factory)</option>';
-    
+    retDelStaff.innerHTML = "";
+
     if(shop === "ALL") { render(); return; }
-    
+
     // Populate Production Staff
     if(STAFF[shop]) {
         STAFF[shop].forEach(s => { 
@@ -981,17 +980,8 @@ function syncShopUI() {
     
     dispatchTargets.sort().forEach(d => {
         delStaff.add(new Option(d, d));
+        retDelStaff.add(new Option(d, d));
     });
-
-    // Populate Drivers into Returns list
-    if(window.DRIVERS) {
-        window.DRIVERS.forEach(d => {
-            retStaff.add(new Option(d, d));
-        });
-    }
-    
-    // Sync Returns Shop if not in ALL mode
-    if(shop !== "ALL") retShop.value = shop;
 
     syncDecUI(); // Sync Declaration UI as well
     render(); 
@@ -1181,10 +1171,10 @@ function handleAddReturn() {
 
     if(editState.ret) {
         const idx = day.returns.findIndex(r => r.id === editState.ret);
-        if(idx !== -1) day.returns[idx] = { ...day.returns[idx], shop, action, stockType: type, staff: retStaff.value, client, qty };
+        if(idx !== -1) day.returns[idx] = { ...day.returns[idx], shop, action, stockType: type, staff: retStaff.value, returnedBy: retDelStaff.value, client, qty };
         cancelEditMode('RET');
     } else {
-        day.returns.push({ id: generateId(), shop, product: currentProduct, action, stockType: type, staff: retStaff.value, client, qty });
+        day.returns.push({ id: generateId(), shop, product: currentProduct, action, stockType: type, staff: retStaff.value, returnedBy: retDelStaff.value, client, qty });
     }
     retQty.value = ""; 
     if(document.getElementById('retClient')) document.getElementById('retClient').value = "";
@@ -1257,7 +1247,10 @@ function editItem(type, id) {
         const i = day.returns.find(r=>r.id===id); if(!i) return;
         if(i.product!==currentProduct) setProductContext(i.product);
         if(i.stockType!==currentCategory) setCategory(i.stockType);
-        retShop.value=i.shop; retStaff.value=i.staff; retQty.value=i.qty;
+        activeShop.value=i.shop; syncShopUI();
+        retStaff.value=i.staff; 
+        if(retDelStaff) retDelStaff.value = (i.returnedBy || "");
+        retQty.value=i.qty;
         if(document.getElementById('retClient')) document.getElementById('retClient').value = (i.client || "");
         document.getElementsByName('retAction').forEach(r => r.checked = (r.value === i.action));
         editState.ret=id; activeShop.disabled=true;
@@ -1501,7 +1494,7 @@ function render() {
         day.returns.forEach(i => {
             if(i.product!==currentProduct || (shop!=="ALL" && i.shop!==shop) || i.stockType!==currentCategory) return;
             const isRet = i.action === 'RETURN';
-            rLog.innerHTML += `<tr><td><span class="badge ${isRet?'bg-green':'bg-red'}">${isRet?'RETURN':'DAMAGE'}</span></td><td><span class="badge ${i.stockType==='PACKET'?'bg-pkt':'bg-ls'}">${i.stockType}</span></td><td>${i.client || '-'}</td><td>${i.staff}</td><td style="text-align:right;font-weight:700">${i.qty}</td><td style="text-align:right"><div class="btn-action-group"><button class="btn-icon btn-edit" onclick="editItem('RET','${i.id}')">E</button><button class="btn-icon btn-del" onclick="deleteItem('RET','${i.id}')">D</button></div></td></tr>`;
+            rLog.innerHTML += `<tr><td><span class="badge ${isRet?'bg-green':'bg-red'}">${isRet?'RETURN':'DAMAGE'}</span></td><td><span class="badge ${i.stockType==='PACKET'?'bg-pkt':'bg-ls'}">${i.stockType}</span></td><td>${i.client || '-'}</td><td>${i.staff}</td><td>${i.returnedBy || '-'}</td><td style="text-align:right;font-weight:700">${i.qty}</td><td style="text-align:right"><div class="btn-action-group"><button class="btn-icon btn-edit" onclick="editItem('RET','${i.id}')">E</button><button class="btn-icon btn-del" onclick="deleteItem('RET','${i.id}')">D</button></div></td></tr>`;
         });
         day.staffDeclarations.forEach(i => {
             if(i.product!==currentProduct || (shop!=="ALL" && i.shop!==shop)) return;

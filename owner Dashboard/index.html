@@ -150,7 +150,7 @@
 
     <!-- CLIENT VIEW -->
     <div id="client" class="content">
-        <div class="filter-bar"><strong>Client Register</strong><button class="btn btn-primary" style="margin-left:auto" onclick="openClientModal()">+ Add Client</button></div>
+        <div class="filter-bar"><strong>Client Register</strong><button class="btn btn-primary" style="margin-left:auto" onclick="bulkImportManualList()">Bulk Import List</button><button class="btn btn-primary" onclick="openClientModal()">+ Add Client</button></div>
         <div class="table-container">
             <table>
                 <thead><tr><th>Name</th><th>Phone</th><th>Price (D/A)</th><th>Action</th></tr></thead>
@@ -172,7 +172,7 @@
 
     <!-- SALES VIEW -->
     <div id="sales" class="content">
-        <div class="filter-bar"><strong>Sales Analytics</strong></div>
+        <div class="filter-bar"><strong>Sales Analytics</strong><button class="btn btn-primary" style="margin-left:auto" onclick="syncSalesClients()">Sync Missing Clients</button></div>
         <div class="table-container">
             <table>
                 <thead><tr><th>Client</th><th>Total Sales</th><th>Total Paid</th><th style="text-align:right">Balance</th></tr></thead>
@@ -296,7 +296,14 @@ function saveClient() {
     if(idx !== "") clientDB[idx] = c; else clientDB.push(c);
     db.collection("data").doc("clients_v4").set({ list: clientDB }).then(closeClientModal);
 }
-function openClientModal() { document.getElementById('clientModal').style.display="flex"; document.getElementById('cId').value=""; document.getElementById('cName').value=""; }
+function openClientModal() { 
+    document.getElementById('clientModal').style.display="flex"; 
+    document.getElementById('cId').value=""; 
+    document.getElementById('cName').value=""; 
+    document.getElementById('cPhone').value="";
+    document.getElementById('cPriceD').value="45"; 
+    document.getElementById('cPriceA').value="55"; 
+}
 function closeClientModal() { document.getElementById('clientModal').style.display="none"; }
 function editClient(i) { const c = clientDB[i]; openClientModal(); document.getElementById('cId').value=i; document.getElementById('cName').value=c.name; document.getElementById('cPhone').value=c.phone; document.getElementById('cPriceD').value=c.pd; document.getElementById('cPriceA').value=c.pa; }
 function deleteClient(i) { if(confirm("Delete Client?")) { clientDB.splice(i,1); db.collection("data").doc("clients_v4").set({ list: clientDB }); } }
@@ -395,6 +402,54 @@ function renderSales() {
         });
     });
     Object.keys(sMap).forEach(n => { tb.innerHTML += `<tr><td>${n}</td><td>₹${sMap[n].s}</td><td>₹${sMap[n].p}</td><td style="text-align:right">₹${sMap[n].s - sMap[n].p}</td></tr>`; });
+}
+
+function syncSalesClients() {
+    let added = 0;
+    const namesWithSales = new Set();
+    Object.keys(routeDaysDB).forEach(d => {
+        const rDay = routeDaysDB[d];
+        ['PACKET','LOOSE'].forEach(c => {
+            if(rDay[c] && rDay[c].shops) Object.keys(rDay[c].shops).forEach(sn => namesWithSales.add(sn));
+        });
+    });
+
+    namesWithSales.forEach(name => {
+        if(!clientDB.find(x => x.name === name)) {
+            clientDB.push({ name: name, phone: "", pd: 45, pa: 55 });
+            added++;
+        }
+    });
+
+    if(added > 0) {
+        db.collection("data").doc("clients_v4").set({ list: clientDB }).then(() => {
+            alert(`✅ Successfully added ${added} missing clients to the register.`);
+            refreshUI();
+        });
+    } else {
+        alert("ℹ️ All clients in sales analytics are already in the register.");
+    }
+}
+
+function bulkImportManualList() {
+    const manualNames = ['KKV CHEMBUMUKKU', 'MALABAR STORES KATITHARA', 'AR BAKERY (lOOSE)', 'SHIYAS NETTOR', 'MALLUS KADAVANTHRA', 'POTTAYIL STORES', 'BHASI UDHAYAMPEROOR', 'ANIL STORES PANAGAD', 'VINAYAGA MLA ROAD', 'KOTTARAM (Loose)', 'VICHOOS', 'VELIKAGATHU PANAGAD', 'JOMON JAMES THEVARA', 'SALAM (LOOSE)', 'COOP MART, ALINCHUDU', 'ALIANS (LOOSE)', 'NAZAR', 'NATHANIYA NETTOR', 'OLIPARAMBIL', 'CHARLS STORES NETTOR', 'FAMILY MINI MART THERVARA', 'MAHENDRAN STORES MLA ROAD', 'ARUN BAKERY PANAGAD', 'KANNAKATTU', 'OLIVE STORES', 'TBS, ALINCHUDU', 'HOMEYMART JANADA', 'PRIYA STORES', 'HARISREE STORES TRIPUNITURA', 'CLASSIK FORT', 'RADHA STORES TRIPUNITURA', 'POORNASREE', 'KRISHNA STORES THEVARA FERRY', 'EOS', 'MK STORES MADAVANA', 'ANJANA MADAVANA', 'MARIA KATTITHARA', 'DIVINE MADAVANA', 'JASS', 'KRK', 'SANDEEP MARADU', 'KGF, PADIVATTAM', 'KAYEES', 'ANU STORES', 'RAVI STORES PANAGAD', 'MEHRIN STORES VENNALA', 'PAINACLE, ALINCHUDU', 'SB STORES TRIPUNITURA', 'ROYAL SUPER MARKET KATHRIKADAVU', 'AJ STORES AMEDA TEMPLE', 'SP STORES EROOR', 'SREE LAKSHMI UDAYAMPEROOR', 'AR BAKERY PANAGAD', 'PRIME SUPER MARKET THEVARA', 'SABARI STORES MLA ROAD', 'KARTHIGA MLA ROAD', 'KADAKKATIL', 'AJWA SUPER MARKET', 'MADHA VEG. THEVARA', 'REYANS', 'NICE BAKERY PANAGAD', 'MALABAR KADAVANTHRA', 'JEYAN EROOR', 'HOT & COOL', 'SWEET CORNER KUMBALAM', 'JOY NIRAVATH', 'PONNUS THEVARA', 'RAGAVA STORES KADAVANDHRA', 'GRAND', 'SHOPY FRESH PANAGAD', 'SHIPYARD', 'MADHA STORES KADAVANTHRA', 'SN SUPERMARKET KADAVANTHRA', 'KALABHAM', 'KUMBALAM (LOOSE)', 'DQ STORES, KENNADIMUKKU', 'VELAYUDHAN TRIPUNITURA', 'DREAMS FOOT WEAR NETTOR', 'THOMMIS PUDHIYAKAVU', 'USHA GANDHI SQUARE', 'JALEEL KUNDANOOR', 'DARSHANA VENNALA', 'GURUVAYOOR PAPPADAM, TRIPUNITHURA', 'SAJU STORES', 'SHAJI STORES THEVARA', 'NIRMAL STORES KUNDANOOR', 'BISMI STORES NETTOR', 'USHA SN PARK', 'AMMUS STORES JANADHA', 'KRISHNA (LOOSE)', 'RUBY', 'AMALA STORES', 'SINDHU, CHEMBUMUKKU', 'PALATHINGAL', 'SHAMSHU MARADU', 'SUDHARSHAN', 'RAHUL STORES UDHAYAMPEROOR', 'NEPOLIAN NETTOR', 'VBAZAR MADAVANA', 'ROYAL BAKERY, EROOR', 'GG MART', 'CHEMBU BAKERY, CHEMBUMUKKU', 'LALSON UDHAYAKAVALA', 'KM STORES, TRIPUNITHURA', 'RADHAKRISHNAN EROOR', 'AS METRO MART', 'MFM, THEVARA', 'FOUR STAR MADAVANA', 'SUPER BAKERY PANAMPILLY NAGAR', 'SREELAYA STORES NETTOR', 'DAILY HOME NEEDS', 'GAYATHRI ( LOOSE)', 'WILSON', 'TMART', 'MALABAR BAKERY VENNALA', 'SN GANDHI NAGAR', 'USHA KOTTARAM', 'PARTHAS', 'KKAR NETTOR', 'HOME MART CHEMBUMUKKU', 'ROYAL NETTOR', 'JAFER NETTOR', 'ALMA BAKERY', 'GIRISH', 'CHAKKALAKKAL', 'HIGH RANGE', 'KERALA STORES PANANGAD', 'GROSERY HUBS, CHEMBUMUKKU', 'AS PALACHARAKUKADA', 'VELIYIL STORES', 'ADHAYAKADA', 'EXPRESS VEGITABLES', 'NANDANA MARADU', 'LOTUS PROVISIONS, VAZHAKALA', 'ST. MARYS THEVARA', 'LALS INN GRAND', 'AN STORES KATITHARA', 'V BAZAR MADAVANA', 'ZERA MINIMART', 'AMMU STORES MOOLEPADAM', 'JOYS STORES KUMBALAM', 'NEW MASJID VENNALA', 'ATLANTIS', 'DARSHANA', 'SS STORES', "PAPPA'S", 'ST MARYS', 'LALAN PANAGAD', 'HEAVENLY BAKERS KATITHARA', 'SREELAKSHMI NETTOR (SHIBU)', 'NIYA STORES KATITHARA', 'KM STORES THEVARA', 'SALIM NETTOR', 'MANI STORES PANAGAD', 'ST JOSEPH KADAVANTHRA', 'ST MARYS UDHAYAMPEROOR', 'ODEES CHIPS, TRIPUNITURA', 'HISHIGHNESS SUPER MARKET TRPT', 'LATHA STORES KATITHARA', 'SRECCS', 'SREELAKSHMI (CHATTY KADA) MARADU', 'BISMI STORES UDHAYAMPEROOR', 'NISHA STORES MARADU', 'LAKSHMI STORES, CHEMBUMUKKU', 'PRAVELIL KUMBALAM', 'ANNA BAKERY', 'JEYAN STORES VENNALA', 'SUBWAY', 'TEA CUP', 'NEW KOTTARAM (LOOSE)', 'JOHNS KATITHARA', 'HOT CUP, VAZHAKALA', 'JJOHNS HOSPITALITY', 'GOWRI STORES MLA ROAD', 'PUTHENVEETIL NETTOR', 'JOY STORES THEVARA', 'MALIAKKAL', 'SI BAKERY THEVARA', 'MINNUMART MLA ROAD', 'USHA NUCLEUS', 'ANJAL KATITHARA', 'ROYAL BAKERY, MARKET ROAD, TRIPUNITURA', 'MILMA THEVARA', 'CHOICE BAKERY, TRIPUNITURA', 'VASINIO', 'ANGEL PROVISIONS THEVARA', 'VYSAKH', 'JANADHA MARGIN', 'JEYA BAKERY MULANTHURUTHY', 'SAROMA STORES', 'LITTLE MARKET THEVARA', 'GREEN KART, ALINCHUDU', 'SWAD SWEETS AND SNACKS, TRIPUNITURA', 'TJS NETTOR', 'AV MART TRAPUNITURA', 'VIJAYA BAKERY', 'ABDULLA STORES VENNALA', 'DIVINE KUMBALAM', 'VIJAYAN PETTA', 'SIDDARTH KAKKANAD', 'KR STORES, PALARIVATTAM', 'BROWNS BAKERY THEVARA', 'SREEKRISHNA UDHAYATHINVATHIL', 'TKM FRESH MART', 'GREEN FRESH', 'KL', 'HILLPALACE', 'AJITHA(LOOSE)', 'ARYA STORES MLA ROAD', 'SHARADHA THEVARA', 'SUPER BAKERY PERUMANOOR', 'KANNADIYIL', 'SREE KRISHNA, NETTOR', 'CKP', 'JEYAN NETTOR', 'SWAMYS (Loose)', 'HOMES', 'VELAYUDHAN THEVARA', 'PHILOMINA', 'SUDHAGARAN NADAKKAVU', 'MAHADEVA STORES KATITHARA', 'MINI TEA STALL, PUDHIYA ROAD', 'SINDHU NORTH (LOOSE)', 'LEELA FOOD / SIJO', 'MARGIN FREE, THEVARA', 'SHILIKUMAR, PUDHIYAROAD', 'ROYAL BAKERY MARADU', 'MT MART NETTOR', 'RAVI STORES KATITHARA', 'CMA', 'PADMANABAN PANAGAD', 'DEVI FANCY', 'SREEKRISHNA ENTERPRISES TRIPUNITURA', 'ROYAL BAKERS UDHAYAMPEROOR', 'AJ STORES KATITHARA', 'ARUVELIL', 'SUPER BAKERY MATTAMAL THEVARA', 'JJ PROVISIONS', 'MARIA STORES', 'SINI EROOR', 'BAKE AND TAKE NETTOR', 'GRK', 'THOTTATHIL BABU MARADU', 'ANNADHA(LOOSE)', 'SATHAR VEG', 'PM STORES', 'PRASANTH THEVARA FERRY', 'SUVIK, TRIPUNITHURA', 'GRAND STORES GANDHI SQUARE', 'AMBADY', 'USHA PANDAVAM', 'MALEKKAD', 'NITHA SUDESH', 'RAJESH STORES EROOR', 'PICKZIMART VENNALA', 'KINGINI MARADU', 'AJ STORES MLA ROAD', 'RADHA', 'SAKETH', 'TK SLEEBA', 'PRIDE STORES KUNDANOOR', 'KRISHNAKUMAR MARADU', 'BABU KOTTAYATHUPARA', 'KAIRALI SUPER MARKET', 'BABYS BAKERY NETTOR', 'BALAN STORES TRIPUNITHURA', 'FATHIMA STORES KADAVANTHRA', 'ROYAL BAKERS MULANTHURUTHY', 'HOSPITAL SHOP NETTOR', 'JAISHA BAKERY', 'NM STORES PANAGAD', 'WILL MART KADAVANTHRA', 'LOEL BAKERY', 'SAMRUTHI SUPER MARKET', 'FATHIMA BAKERY NETTOR', 'SAJITH BAKERY PANAGAD', 'PAPILON SUPER STORES', 'KALLUPURAKKAL KATITHARA', 'KUMAR BAKERS, TRIPUNITURA', 'KEETHARAYIL STORES KUNDANOOR', 'KARTHIGA NETTOR', 'DHYAN STORES TRIPUNITURA', 'DAY TO DAY MINI MART', 'AISWARYA COOL BAR', 'MAGIC OVEN KADAVANTHRA', 'ALIF MART MOOLEPADAM', 'AKR PANAGAD', 'SHIJI BAKERY KATTITHARA', 'WEONE', 'ANJANEYA STORES TRIPUNITURA', 'REAL STORES', 'TRUE BELL THEVARA', 'ABDU VEGITABLES VENNALA', 'COLLEGE CANTEEN (LOOSE)', 'KRISHNA STORES KANIYAMPUZHA', 'PATHEMARI', 'ALI STORES VENNALA', 'MN', 'PRINCE STORES', 'PRAGASAN JANADHA ROAD MARADU', 'NEW STAR UDHAYAMPEROOR', 'MARIYA KUNDANOOR', 'SRP', 'RAVI CHELLUCIRA BHAGAVATHY TEMPLE', 'AMK PANAGAD', 'GLOBAL FRESH NETTOR', 'PRANAVAM CHEMBUMUKKU', 'KOTHARI SUPER MARKET', 'KRISHNA STORES (NEW)', 'TEA BAY KUMBALAM', 'PAULY STORES THEVARA', 'DARSHANA EROOR', 'VALLUVASSERY KADAVANTHRA', 'SUJITH THATTUKADA', 'AREENA', 'ST THOMAS MULANTHURUTHY', 'K&K', 'BEST BAKERS nr THURUTHY TEMPLE', 'AMEYA ANANDHU', 'JACKSON THEVARA', 'HOMEY MART JANADHA', 'PRIDE STORES', 'KEEDHARAYIL', 'SHILIKUMAR', 'Retail loose (kkshop)', 'HABIT EAT(LOOSE)', 'MARGIN FREE MARKET THEVARA'];
+    
+    let added = 0;
+    manualNames.forEach(name => {
+        if(!clientDB.find(x => x.name === name)) {
+            clientDB.push({ name: name, phone: "", pd: 45, pa: 55 });
+            added++;
+        }
+    });
+
+    if(added > 0) {
+        db.collection("data").doc("clients_v4").set({ list: clientDB }).then(() => {
+            alert(`✅ Successfully imported ${added} new clients from the list.`);
+            refreshUI();
+        });
+    } else {
+        alert("ℹ️ All clients in the list are already in your register.");
+    }
 }
 
 loadData();
