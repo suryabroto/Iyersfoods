@@ -943,7 +943,7 @@
     }
 
     function loadRouteMaster() {
-        db.collection("data").doc("routeMaster").onSnapshot((snap) => {
+        db.collection("data").doc("routeMaster_v4").onSnapshot((snap) => {
             if(snap.exists) {
                 const list = snap.data().list || [];
                 const routes = list.map(s => s.name).sort();

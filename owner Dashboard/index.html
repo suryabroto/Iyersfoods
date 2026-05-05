@@ -6,8 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <style>
     :root {
         --nav-bg: #0f172a;
@@ -150,7 +148,17 @@
 
     <!-- CLIENT VIEW -->
     <div id="client" class="content">
-        <div class="filter-bar"><strong>Client Register</strong><button class="btn btn-primary" style="margin-left:auto" onclick="bulkImportManualList()">Bulk Import List</button><button class="btn btn-primary" onclick="openClientModal()">+ Add Client</button></div>
+        <div class="filter-bar">
+            <strong>Client Register</strong>
+            <input type="text" id="clientSearch" placeholder="Search client..." oninput="debouncedRenderClients()" style="width: 200px; margin-left: 20px;">
+            <select id="clientSort" onchange="renderClients()" style="width: 150px;">
+                <option value="none">Sort By</option>
+                <option value="asc">A-Z</option>
+                <option value="desc">Z-A</option>
+            </select>
+            <button class="btn btn-primary" style="margin-left:auto" onclick="bulkImportManualList()">Bulk Import List</button>
+            <button class="btn btn-primary" onclick="openClientModal()">+ Add Client</button>
+        </div>
         <div class="table-container">
             <table>
                 <thead><tr><th>Name</th><th>Phone</th><th>Price (D/A)</th><th>Action</th></tr></thead>
@@ -206,9 +214,13 @@
     <div style="display:flex; gap:10px; margin-top:20px"><button class="btn btn-primary" style="flex:1" onclick="saveRoute()">Save</button><button class="btn btn-danger" style="flex:1" onclick="closeRouteModal()">Cancel</button></div>
 </div></div>
 
-<script>
+<script type="module">
+import { db, doc, setDoc, onSnapshot, getDoc, collection, getDocs, updateDoc } from "../firebase-config.js";
+
 /* --- NAVIGATION --- */
+let activeSection = 'home';
 window.nav = function(id, el) {
+    activeSection = id;
     document.querySelectorAll('.content').forEach(d => d.classList.remove('active'));
     const target = document.getElementById(id);
     if(target) target.classList.add('active');
@@ -216,19 +228,8 @@ window.nav = function(id, el) {
     if(el) el.classList.add('active');
     const title = document.getElementById('pageTitle');
     if(title && el) title.innerText = el.innerText;
+    refreshUI();
 };
-
-/* --- FIREBASE --- */
-const firebaseConfig = {
-  apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
-  authDomain: "iyers-c0944.firebaseapp.com",
-  projectId: "iyers-c0944",
-  storageBucket: "iyers-c0944.firebasestorage.app",
-  messagingSenderId: "234376255779",
-  appId: "1:234376255779:web:8f4b43ff3f66cfd4071496"
-};
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
 
 /* --- STATE --- */
 let erpDB = {};
@@ -240,26 +241,51 @@ let currentDate = new Date().toISOString().split('T')[0];
 let mainChart = null;
 
 /* --- DATA LOADING --- */
-function loadData() {
-    db.collection("data").doc("erp_v4").onSnapshot(snap => { if(snap.exists) erpDB = snap.data(); refreshUI(); });
-    db.collection("data").doc("staff_v4").onSnapshot(snap => { if(snap.exists) staffDB = snap.data().list || []; refreshUI(); });
-    db.collection("data").doc("clients_v4").onSnapshot(snap => { if(snap.exists) clientDB = snap.data().list || []; refreshUI(); });
-    db.collection("data").doc("routeMaster").onSnapshot(snap => { if(snap.exists) routeMasterDB = snap.data().list || []; refreshUI(); });
-    db.collection("routeDays").onSnapshot(snap => {
+async function loadData() {
+    console.log("Loading initial data (Speed Optimized)...");
+    
+    // 1. Fetch initial state in parallel for instant display
+    try {
+        const [erpS, staffS, clientsS, routeS] = await Promise.all([
+            getDoc(doc(db, "data", "erp_v4")),
+            getDoc(doc(db, "data", "staff_v4")),
+            getDoc(doc(db, "data", "clients_v4")),
+            getDoc(doc(db, "data", "routeMaster_v4"))
+        ]);
+
+        if(erpS.exists()) erpDB = erpS.data();
+        if(staffS.exists()) staffDB = staffS.data().list || [];
+        if(clientsS.exists()) clientDB = clientsS.data().list || [];
+        if(routeS.exists()) routeMasterDB = routeS.data().list || [];
+        
+        refreshUI();
+        console.log("Initial data loaded ✅");
+    } catch (e) {
+        console.error("Initial load error:", e);
+    }
+
+    // 2. Attach background listeners for real-time updates
+    onSnapshot(doc(db, "data", "erp_v4"), snap => { if(snap.exists()) { erpDB = snap.data(); refreshUI(); } });
+    onSnapshot(doc(db, "data", "staff_v4"), snap => { if(snap.exists()) { staffDB = snap.data().list || []; refreshUI(); } });
+    onSnapshot(doc(db, "data", "clients_v4"), snap => { if(snap.exists()) { clientDB = snap.data().list || []; refreshUI(); } });
+    onSnapshot(doc(db, "data", "routeMaster_v4"), snap => { if(snap.exists()) { routeMasterDB = snap.data().list || []; refreshUI(); } });
+    onSnapshot(collection(db, "routeDays"), snap => {
+        routeDaysDB = {}; 
         snap.forEach(d => { routeDaysDB[d.id] = d.data(); });
         refreshUI();
     });
 }
+window.loadData = loadData;
 
 function refreshUI() {
     try {
-        renderHome();
-        renderStaffs();
-        renderProduction();
-        renderDelivery();
-        renderClients();
-        renderRouteMaster();
-        renderSales();
+        if(activeSection === 'home') renderHome();
+        else if(activeSection === 'staff') renderStaffs();
+        else if(activeSection === 'prod') renderProduction();
+        else if(activeSection === 'del') renderDelivery();
+        else if(activeSection === 'client') renderClients();
+        else if(activeSection === 'routeMaster') renderRouteMaster();
+        else if(activeSection === 'sales') renderSales();
     } catch(e) { console.error("UI Refresh Error:", e); }
 }
 
@@ -272,66 +298,83 @@ function loadDateData() {
 }
 
 /* --- STAFF CRUD --- */
-function saveStaff() {
+window.saveStaff = function() {
     const idx = document.getElementById('sId').value;
     const name = document.getElementById('sName').value.trim();
     if(!name) return;
     const type = document.getElementById('sType').value;
     const shop = document.getElementById('sShop').value;
     const s = { name, type, shop };
-    if(idx !== "") staffDB[idx] = s; else staffDB.push(s);
-    db.collection("data").doc("staff_v4").set({ list: staffDB }).then(closeStaffModal);
-}
-function openStaffModal() { document.getElementById('staffModal').style.display="flex"; document.getElementById('sId').value=""; document.getElementById('sName').value=""; }
-function closeStaffModal() { document.getElementById('staffModal').style.display="none"; }
-function editStaff(i) { const s = staffDB[i]; openStaffModal(); document.getElementById('sId').value=i; document.getElementById('sName').value=s.name; document.getElementById('sType').value=s.type; document.getElementById('sShop').value=s.shop; }
-function deleteStaff(i) { if(confirm("Delete Staff?")) { staffDB.splice(i,1); db.collection("data").doc("staff_v4").set({ list: staffDB }); } }
+    const newList = [...staffDB];
+    if(idx !== "") newList[idx] = s; else newList.push(s);
+    setDoc(doc(db, "data", "staff_v4"), { list: newList }).then(closeStaffModal);
+};
+window.openStaffModal = function() { document.getElementById('staffModal').style.display="flex"; document.getElementById('sId').value=""; document.getElementById('sName').value=""; };
+window.closeStaffModal = function() { document.getElementById('staffModal').style.display="none"; };
+window.editStaff = function(i) { const s = staffDB[i]; openStaffModal(); document.getElementById('sId').value=i; document.getElementById('sName').value=s.name; document.getElementById('sType').value=s.type; document.getElementById('sShop').value=s.shop; };
+window.deleteStaff = function(i) { if(confirm("Delete Staff?")) { const newList = [...staffDB]; newList.splice(i,1); setDoc(doc(db, "data", "staff_v4"), { list: newList }); } };
 
 /* --- CLIENT CRUD --- */
-function saveClient() {
+window.saveClient = function() {
     const idx = document.getElementById('cId').value;
     const name = document.getElementById('cName').value.trim();
     if(!name) return;
     const c = { name, phone: document.getElementById('cPhone').value, pd: Number(document.getElementById('cPriceD').value), pa: Number(document.getElementById('cPriceA').value) };
-    if(idx !== "") clientDB[idx] = c; else clientDB.push(c);
-    db.collection("data").doc("clients_v4").set({ list: clientDB }).then(closeClientModal);
-}
-function openClientModal() { 
+    const newList = [...clientDB];
+    if(idx !== "") newList[idx] = c; else newList.push(c);
+    setDoc(doc(db, "data", "clients_v4"), { list: newList }).then(closeClientModal);
+};
+window.openClientModal = function() { 
     document.getElementById('clientModal').style.display="flex"; 
     document.getElementById('cId').value=""; 
     document.getElementById('cName').value=""; 
     document.getElementById('cPhone').value="";
     document.getElementById('cPriceD').value="45"; 
     document.getElementById('cPriceA').value="55"; 
-}
-function closeClientModal() { document.getElementById('clientModal').style.display="none"; }
-function editClient(i) { const c = clientDB[i]; openClientModal(); document.getElementById('cId').value=i; document.getElementById('cName').value=c.name; document.getElementById('cPhone').value=c.phone; document.getElementById('cPriceD').value=c.pd; document.getElementById('cPriceA').value=c.pa; }
-function deleteClient(i) { if(confirm("Delete Client?")) { clientDB.splice(i,1); db.collection("data").doc("clients_v4").set({ list: clientDB }); } }
+};
+window.closeClientModal = function() { document.getElementById('clientModal').style.display="none"; };
+window.editClient = function(i) { const c = clientDB[i]; openClientModal(); document.getElementById('cId').value=i; document.getElementById('cName').value=c.name; document.getElementById('cPhone').value=c.phone; document.getElementById('cPriceD').value=c.pd; document.getElementById('cPriceA').value=c.pa; };
+window.deleteClient = function(i) { if(confirm("Delete Client?")) { const newList = [...clientDB]; newList.splice(i,1); setDoc(doc(db, "data", "clients_v4"), { list: newList }); } };
 
 /* --- ROUTE CRUD --- */
-function saveRoute() {
+window.saveRoute = function() {
     const idx = document.getElementById('rIdx').value;
     const name = document.getElementById('rName').value.trim();
     if(!name) return;
-    if(idx !== "") routeMasterDB[idx] = { name }; else routeMasterDB.push({ name });
-    db.collection("data").doc("routeMaster").set({ list: routeMasterDB }).then(closeRouteModal);
-}
-function openRouteModal() { document.getElementById('routeModal').style.display="flex"; document.getElementById('rIdx').value=""; document.getElementById('rName').value=""; }
-function closeRouteModal() { document.getElementById('routeModal').style.display="none"; }
-function editRoute(i) { const r = routeMasterDB[i]; openRouteModal(); document.getElementById('rIdx').value=i; document.getElementById('rName').value=r.name; }
-function deleteRoute(i) { if(confirm("Delete Route?")) { routeMasterDB.splice(i,1); db.collection("data").doc("routeMaster").set({ list: routeMasterDB }); } }
+    const newList = [...routeMasterDB];
+    if(idx !== "") newList[idx] = { name }; else newList.push({ name });
+    setDoc(doc(db, "data", "routeMaster_v4"), { list: newList }).then(closeRouteModal);
+};
+window.openRouteModal = function() { document.getElementById('routeModal').style.display="flex"; document.getElementById('rIdx').value=""; document.getElementById('rName').value=""; };
+window.closeRouteModal = function() { document.getElementById('routeModal').style.display="none"; };
+window.editRoute = function(i) { const r = routeMasterDB[i]; openRouteModal(); document.getElementById('rIdx').value=i; document.getElementById('rName').value=r.name; };
+window.deleteRoute = function(i) { if(confirm("Delete Route?")) { const newList = [...routeMasterDB]; newList.splice(i,1); setDoc(doc(db, "data", "routeMaster_v4"), { list: newList }); } };
 
 /* --- RENDERERS --- */
 function renderHome() {
+    console.log("Rendering Home Dashboard for date:", currentDate);
     let tP = 0, tD = 0;
     const day = erpDB[currentDate];
-    if(day && day.productions) day.productions.forEach(p => tP += Number(p.qty)||0);
+    if(day && day.productions) {
+        console.log("Production records found for today:", day.productions.length);
+        day.productions.forEach(p => tP += Number(p.qty)||0);
+    } else {
+        console.log("No production records found for today in erpDB.");
+    }
+
     const rDay = routeDaysDB[currentDate];
-    if(rDay) { ['PACKET','LOOSE'].forEach(c => { if(rDay[c] && rDay[c].trips) rDay[c].trips.forEach(t => tD += (Number(t.dosa)||0) + (Number(t.appam)||0)); }); }
+    if(rDay) { 
+        console.log("Route data found for today.");
+        ['PACKET','LOOSE'].forEach(c => { if(rDay[c] && rDay[c].trips) rDay[c].trips.forEach(t => tD += (Number(t.dosa)||0) + (Number(t.appam)||0)); }); 
+    } else {
+        console.log("No route data found for today in routeDaysDB.");
+    }
+
     document.getElementById('kpiProd').innerText = tP + " L";
     document.getElementById('kpiDel').innerText = tD + " L";
     document.getElementById('kpiStaff').innerText = staffDB.length;
     document.getElementById('kpiRoutes').innerText = routeMasterDB.length;
+    
     if(typeof Chart !== 'undefined') {
         const ctx = document.getElementById('chartMain');
         if(ctx) {
@@ -343,24 +386,28 @@ function renderHome() {
 
 function renderStaffs() {
     const tb = document.getElementById('staffTable'); if(!tb) return;
-    tb.innerHTML = "";
-    staffDB.forEach((s, i) => { tb.innerHTML += `<tr><td>${s.name}</td><td>${s.type}</td><td>${s.shop}</td><td><button onclick="editStaff(${i})">Edit</button> <button onclick="deleteStaff(${i})">Del</button></td></tr>`; });
+    let html = "";
+    staffDB.forEach((s, i) => { html += `<tr><td>${s.name}</td><td>${s.type}</td><td>${s.shop}</td><td><button onclick="editStaff(${i})">Edit</button> <button onclick="deleteStaff(${i})">Del</button></td></tr>`; });
+    tb.innerHTML = html;
 }
 
 function renderProduction() {
     const tb = document.getElementById('prodTable'); if(!tb) return;
-    tb.innerHTML = "";
+    let html = "";
     const day = erpDB[currentDate];
-    if(day && day.productions) day.productions.forEach((p, i) => {
-        tb.innerHTML += `<tr><td>${i+1}</td><td>${p.shop}</td><td>${p.staff}</td><td>${p.product}</td><td>${p.type}</td><td style="text-align:right">${p.qty}</td></tr>`;
-    });
+    if(day && day.productions) {
+        day.productions.forEach((p, i) => {
+            html += `<tr><td>${i+1}</td><td>${p.shop}</td><td>${p.staff}</td><td>${p.product}</td><td>${p.type}</td><td style="text-align:right">${p.qty}</td></tr>`;
+        });
+    }
+    tb.innerHTML = html;
 }
 
 function renderDelivery() {
     const g = document.getElementById('deliveryGrid'); if(!g) return;
-    g.innerHTML = "";
+    let html = "";
     const rDay = routeDaysDB[currentDate];
-    if(!rDay) { g.innerHTML = "No route data for this date"; return; }
+    if(!rDay) { g.innerHTML = "<div style='padding:20px; color:#64748b'>No route data for this date</div>"; return; }
     let dr = {};
     ['PACKET','LOOSE'].forEach(c => {
         if(rDay[c] && rDay[c].trips) rDay[c].trips.forEach(t => {
@@ -368,25 +415,80 @@ function renderDelivery() {
         });
     });
     Object.keys(dr).forEach(n => {
-        g.innerHTML += `<div class="driver-card"><div class="driver-head"><span>${n}</span><span>${dr[n].t} Trips</span></div><div class="d-stat"><div class="d-stat-item">Dosa: ${dr[n].d}</div><div class="d-stat-item">Appam: ${dr[n].a}</div></div></div>`;
+        html += `<div class="driver-card"><div class="driver-head"><span>${n}</span><span>${dr[n].t} Trips</span></div><div class="d-stat"><div class="d-stat-item"><div class="d-stat-lbl">Dosa</div><div class="d-stat-val">${dr[n].d}</div></div><div class="d-stat-item"><div class="d-stat-lbl">Appam</div><div class="d-stat-val">${dr[n].a}</div></div></div></div>`;
     });
+    g.innerHTML = html;
+}
+
+function removeDuplicateClients() {
+    let seen = new Set();
+    let unique = [];
+    let hasDupes = false;
+    clientDB.forEach(c => {
+        if(!seen.has(c.name)) {
+            seen.add(c.name);
+            unique.push(c);
+        } else {
+            hasDupes = true;
+        }
+    });
+    if(hasDupes) {
+        console.log("Removing duplicates from Client Register...");
+        setDoc(doc(db, "data", "clients_v4"), { list: unique });
+        return true;
+    }
+    return false;
+}
+
+let searchTimeout;
+function debouncedRenderClients() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(renderClients, 100);
 }
 
 function renderClients() {
     const tb = document.getElementById('clientTable'); if(!tb) return;
-    tb.innerHTML = "";
-    clientDB.forEach((c, i) => { tb.innerHTML += `<tr><td>${c.name}</td><td>${c.phone||'-'}</td><td>${c.pd}/${c.pa}</td><td><button onclick="editClient(${i})">Edit</button> <button onclick="deleteClient(${i})">Del</button></td></tr>`; });
+    const searchEl = document.getElementById('clientSearch');
+    const search = searchEl ? searchEl.value.toLowerCase() : "";
+    const sortEl = document.getElementById('clientSort');
+    const sort = sortEl ? sortEl.value : "none";
+    
+    // Optimization: Add original index once
+    let list = clientDB.map((c, idx) => ({ ...c, originalIndex: idx }));
+    
+    // Search
+    if(search) {
+        list = list.filter(c => c.name.toLowerCase().includes(search));
+    }
+    
+    // Sort
+    if(sort === 'asc') {
+        list.sort((a,b) => a.name.localeCompare(b.name));
+    } else if(sort === 'desc') {
+        list.sort((a,b) => b.name.localeCompare(a.name));
+    }
+    
+    let html = "";
+    for(let i=0; i<list.length; i++) {
+        const c = list[i];
+        html += `<tr><td>${c.name}</td><td>${c.phone||'-'}</td><td>${c.pd}/${c.pa}</td><td><button onclick="editClient(${c.originalIndex})">Edit</button> <button onclick="deleteClient(${c.originalIndex})">Del</button></td></tr>`; 
+    }
+    tb.innerHTML = html;
 }
+
+window.debouncedRenderClients = debouncedRenderClients;
+window.renderClients = renderClients;
 
 function renderRouteMaster() {
     const tb = document.getElementById('routeTable'); if(!tb) return;
-    tb.innerHTML = "";
-    routeMasterDB.forEach((r, i) => { tb.innerHTML += `<tr><td>${r.name}</td><td><button onclick="editRoute(${i})">Edit</button> <button onclick="deleteRoute(${i})">Del</button></td></tr>`; });
+    let html = "";
+    routeMasterDB.forEach((r, i) => { html += `<tr><td>${r.name}</td><td><button onclick="editRoute(${i})">Edit</button> <button onclick="deleteRoute(${i})">Del</button></td></tr>`; });
+    tb.innerHTML = html;
 }
+window.renderRouteMaster = renderRouteMaster;
 
 function renderSales() {
     const tb = document.getElementById('salesTable'); if(!tb) return;
-    tb.innerHTML = "";
     let sMap = {};
     Object.keys(routeDaysDB).forEach(d => {
         const rDay = routeDaysDB[d];
@@ -401,10 +503,12 @@ function renderSales() {
             }
         });
     });
-    Object.keys(sMap).forEach(n => { tb.innerHTML += `<tr><td>${n}</td><td>₹${sMap[n].s}</td><td>₹${sMap[n].p}</td><td style="text-align:right">₹${sMap[n].s - sMap[n].p}</td></tr>`; });
+    let html = "";
+    Object.keys(sMap).forEach(n => { html += `<tr><td>${n}</td><td>₹${sMap[n].s}</td><td>₹${sMap[n].p}</td><td style="text-align:right">₹${sMap[n].s - sMap[n].p}</td></tr>`; });
+    tb.innerHTML = html;
 }
 
-function syncSalesClients() {
+window.syncSalesClients = function() {
     let added = 0;
     const namesWithSales = new Set();
     Object.keys(routeDaysDB).forEach(d => {
@@ -422,17 +526,17 @@ function syncSalesClients() {
     });
 
     if(added > 0) {
-        db.collection("data").doc("clients_v4").set({ list: clientDB }).then(() => {
+        setDoc(doc(db, "data", "clients_v4"), { list: clientDB }).then(() => {
             alert(`✅ Successfully added ${added} missing clients to the register.`);
             refreshUI();
         });
     } else {
         alert("ℹ️ All clients in sales analytics are already in the register.");
     }
-}
+};
 
-function bulkImportManualList() {
-    const manualNames = ['KKV CHEMBUMUKKU', 'MALABAR STORES KATITHARA', 'AR BAKERY (lOOSE)', 'SHIYAS NETTOR', 'MALLUS KADAVANTHRA', 'POTTAYIL STORES', 'BHASI UDHAYAMPEROOR', 'ANIL STORES PANAGAD', 'VINAYAGA MLA ROAD', 'KOTTARAM (Loose)', 'VICHOOS', 'VELIKAGATHU PANAGAD', 'JOMON JAMES THEVARA', 'SALAM (LOOSE)', 'COOP MART, ALINCHUDU', 'ALIANS (LOOSE)', 'NAZAR', 'NATHANIYA NETTOR', 'OLIPARAMBIL', 'CHARLS STORES NETTOR', 'FAMILY MINI MART THERVARA', 'MAHENDRAN STORES MLA ROAD', 'ARUN BAKERY PANAGAD', 'KANNAKATTU', 'OLIVE STORES', 'TBS, ALINCHUDU', 'HOMEYMART JANADA', 'PRIYA STORES', 'HARISREE STORES TRIPUNITURA', 'CLASSIK FORT', 'RADHA STORES TRIPUNITURA', 'POORNASREE', 'KRISHNA STORES THEVARA FERRY', 'EOS', 'MK STORES MADAVANA', 'ANJANA MADAVANA', 'MARIA KATTITHARA', 'DIVINE MADAVANA', 'JASS', 'KRK', 'SANDEEP MARADU', 'KGF, PADIVATTAM', 'KAYEES', 'ANU STORES', 'RAVI STORES PANAGAD', 'MEHRIN STORES VENNALA', 'PAINACLE, ALINCHUDU', 'SB STORES TRIPUNITURA', 'ROYAL SUPER MARKET KATHRIKADAVU', 'AJ STORES AMEDA TEMPLE', 'SP STORES EROOR', 'SREE LAKSHMI UDAYAMPEROOR', 'AR BAKERY PANAGAD', 'PRIME SUPER MARKET THEVARA', 'SABARI STORES MLA ROAD', 'KARTHIGA MLA ROAD', 'KADAKKATIL', 'AJWA SUPER MARKET', 'MADHA VEG. THEVARA', 'REYANS', 'NICE BAKERY PANAGAD', 'MALABAR KADAVANTHRA', 'JEYAN EROOR', 'HOT & COOL', 'SWEET CORNER KUMBALAM', 'JOY NIRAVATH', 'PONNUS THEVARA', 'RAGAVA STORES KADAVANDHRA', 'GRAND', 'SHOPY FRESH PANAGAD', 'SHIPYARD', 'MADHA STORES KADAVANTHRA', 'SN SUPERMARKET KADAVANTHRA', 'KALABHAM', 'KUMBALAM (LOOSE)', 'DQ STORES, KENNADIMUKKU', 'VELAYUDHAN TRIPUNITURA', 'DREAMS FOOT WEAR NETTOR', 'THOMMIS PUDHIYAKAVU', 'USHA GANDHI SQUARE', 'JALEEL KUNDANOOR', 'DARSHANA VENNALA', 'GURUVAYOOR PAPPADAM, TRIPUNITHURA', 'SAJU STORES', 'SHAJI STORES THEVARA', 'NIRMAL STORES KUNDANOOR', 'BISMI STORES NETTOR', 'USHA SN PARK', 'AMMUS STORES JANADHA', 'KRISHNA (LOOSE)', 'RUBY', 'AMALA STORES', 'SINDHU, CHEMBUMUKKU', 'PALATHINGAL', 'SHAMSHU MARADU', 'SUDHARSHAN', 'RAHUL STORES UDHAYAMPEROOR', 'NEPOLIAN NETTOR', 'VBAZAR MADAVANA', 'ROYAL BAKERY, EROOR', 'GG MART', 'CHEMBU BAKERY, CHEMBUMUKKU', 'LALSON UDHAYAKAVALA', 'KM STORES, TRIPUNITHURA', 'RADHAKRISHNAN EROOR', 'AS METRO MART', 'MFM, THEVARA', 'FOUR STAR MADAVANA', 'SUPER BAKERY PANAMPILLY NAGAR', 'SREELAYA STORES NETTOR', 'DAILY HOME NEEDS', 'GAYATHRI ( LOOSE)', 'WILSON', 'TMART', 'MALABAR BAKERY VENNALA', 'SN GANDHI NAGAR', 'USHA KOTTARAM', 'PARTHAS', 'KKAR NETTOR', 'HOME MART CHEMBUMUKKU', 'ROYAL NETTOR', 'JAFER NETTOR', 'ALMA BAKERY', 'GIRISH', 'CHAKKALAKKAL', 'HIGH RANGE', 'KERALA STORES PANANGAD', 'GROSERY HUBS, CHEMBUMUKKU', 'AS PALACHARAKUKADA', 'VELIYIL STORES', 'ADHAYAKADA', 'EXPRESS VEGITABLES', 'NANDANA MARADU', 'LOTUS PROVISIONS, VAZHAKALA', 'ST. MARYS THEVARA', 'LALS INN GRAND', 'AN STORES KATITHARA', 'V BAZAR MADAVANA', 'ZERA MINIMART', 'AMMU STORES MOOLEPADAM', 'JOYS STORES KUMBALAM', 'NEW MASJID VENNALA', 'ATLANTIS', 'DARSHANA', 'SS STORES', "PAPPA'S", 'ST MARYS', 'LALAN PANAGAD', 'HEAVENLY BAKERS KATITHARA', 'SREELAKSHMI NETTOR (SHIBU)', 'NIYA STORES KATITHARA', 'KM STORES THEVARA', 'SALIM NETTOR', 'MANI STORES PANAGAD', 'ST JOSEPH KADAVANTHRA', 'ST MARYS UDHAYAMPEROOR', 'ODEES CHIPS, TRIPUNITURA', 'HISHIGHNESS SUPER MARKET TRPT', 'LATHA STORES KATITHARA', 'SRECCS', 'SREELAKSHMI (CHATTY KADA) MARADU', 'BISMI STORES UDHAYAMPEROOR', 'NISHA STORES MARADU', 'LAKSHMI STORES, CHEMBUMUKKU', 'PRAVELIL KUMBALAM', 'ANNA BAKERY', 'JEYAN STORES VENNALA', 'SUBWAY', 'TEA CUP', 'NEW KOTTARAM (LOOSE)', 'JOHNS KATITHARA', 'HOT CUP, VAZHAKALA', 'JJOHNS HOSPITALITY', 'GOWRI STORES MLA ROAD', 'PUTHENVEETIL NETTOR', 'JOY STORES THEVARA', 'MALIAKKAL', 'SI BAKERY THEVARA', 'MINNUMART MLA ROAD', 'USHA NUCLEUS', 'ANJAL KATITHARA', 'ROYAL BAKERY, MARKET ROAD, TRIPUNITURA', 'MILMA THEVARA', 'CHOICE BAKERY, TRIPUNITURA', 'VASINIO', 'ANGEL PROVISIONS THEVARA', 'VYSAKH', 'JANADHA MARGIN', 'JEYA BAKERY MULANTHURUTHY', 'SAROMA STORES', 'LITTLE MARKET THEVARA', 'GREEN KART, ALINCHUDU', 'SWAD SWEETS AND SNACKS, TRIPUNITURA', 'TJS NETTOR', 'AV MART TRAPUNITURA', 'VIJAYA BAKERY', 'ABDULLA STORES VENNALA', 'DIVINE KUMBALAM', 'VIJAYAN PETTA', 'SIDDARTH KAKKANAD', 'KR STORES, PALARIVATTAM', 'BROWNS BAKERY THEVARA', 'SREEKRISHNA UDHAYATHINVATHIL', 'TKM FRESH MART', 'GREEN FRESH', 'KL', 'HILLPALACE', 'AJITHA(LOOSE)', 'ARYA STORES MLA ROAD', 'SHARADHA THEVARA', 'SUPER BAKERY PERUMANOOR', 'KANNADIYIL', 'SREE KRISHNA, NETTOR', 'CKP', 'JEYAN NETTOR', 'SWAMYS (Loose)', 'HOMES', 'VELAYUDHAN THEVARA', 'PHILOMINA', 'SUDHAGARAN NADAKKAVU', 'MAHADEVA STORES KATITHARA', 'MINI TEA STALL, PUDHIYA ROAD', 'SINDHU NORTH (LOOSE)', 'LEELA FOOD / SIJO', 'MARGIN FREE, THEVARA', 'SHILIKUMAR, PUDHIYAROAD', 'ROYAL BAKERY MARADU', 'MT MART NETTOR', 'RAVI STORES KATITHARA', 'CMA', 'PADMANABAN PANAGAD', 'DEVI FANCY', 'SREEKRISHNA ENTERPRISES TRIPUNITURA', 'ROYAL BAKERS UDHAYAMPEROOR', 'AJ STORES KATITHARA', 'ARUVELIL', 'SUPER BAKERY MATTAMAL THEVARA', 'JJ PROVISIONS', 'MARIA STORES', 'SINI EROOR', 'BAKE AND TAKE NETTOR', 'GRK', 'THOTTATHIL BABU MARADU', 'ANNADHA(LOOSE)', 'SATHAR VEG', 'PM STORES', 'PRASANTH THEVARA FERRY', 'SUVIK, TRIPUNITHURA', 'GRAND STORES GANDHI SQUARE', 'AMBADY', 'USHA PANDAVAM', 'MALEKKAD', 'NITHA SUDESH', 'RAJESH STORES EROOR', 'PICKZIMART VENNALA', 'KINGINI MARADU', 'AJ STORES MLA ROAD', 'RADHA', 'SAKETH', 'TK SLEEBA', 'PRIDE STORES KUNDANOOR', 'KRISHNAKUMAR MARADU', 'BABU KOTTAYATHUPARA', 'KAIRALI SUPER MARKET', 'BABYS BAKERY NETTOR', 'BALAN STORES TRIPUNITHURA', 'FATHIMA STORES KADAVANTHRA', 'ROYAL BAKERS MULANTHURUTHY', 'HOSPITAL SHOP NETTOR', 'JAISHA BAKERY', 'NM STORES PANAGAD', 'WILL MART KADAVANTHRA', 'LOEL BAKERY', 'SAMRUTHI SUPER MARKET', 'FATHIMA BAKERY NETTOR', 'SAJITH BAKERY PANAGAD', 'PAPILON SUPER STORES', 'KALLUPURAKKAL KATITHARA', 'KUMAR BAKERS, TRIPUNITURA', 'KEETHARAYIL STORES KUNDANOOR', 'KARTHIGA NETTOR', 'DHYAN STORES TRIPUNITURA', 'DAY TO DAY MINI MART', 'AISWARYA COOL BAR', 'MAGIC OVEN KADAVANTHRA', 'ALIF MART MOOLEPADAM', 'AKR PANAGAD', 'SHIJI BAKERY KATTITHARA', 'WEONE', 'ANJANEYA STORES TRIPUNITURA', 'REAL STORES', 'TRUE BELL THEVARA', 'ABDU VEGITABLES VENNALA', 'COLLEGE CANTEEN (LOOSE)', 'KRISHNA STORES KANIYAMPUZHA', 'PATHEMARI', 'ALI STORES VENNALA', 'MN', 'PRINCE STORES', 'PRAGASAN JANADHA ROAD MARADU', 'NEW STAR UDHAYAMPEROOR', 'MARIYA KUNDANOOR', 'SRP', 'RAVI CHELLUCIRA BHAGAVATHY TEMPLE', 'AMK PANAGAD', 'GLOBAL FRESH NETTOR', 'PRANAVAM CHEMBUMUKKU', 'KOTHARI SUPER MARKET', 'KRISHNA STORES (NEW)', 'TEA BAY KUMBALAM', 'PAULY STORES THEVARA', 'DARSHANA EROOR', 'VALLUVASSERY KADAVANTHRA', 'SUJITH THATTUKADA', 'AREENA', 'ST THOMAS MULANTHURUTHY', 'K&K', 'BEST BAKERS nr THURUTHY TEMPLE', 'AMEYA ANANDHU', 'JACKSON THEVARA', 'HOMEY MART JANADHA', 'PRIDE STORES', 'KEEDHARAYIL', 'SHILIKUMAR', 'Retail loose (kkshop)', 'HABIT EAT(LOOSE)', 'MARGIN FREE MARKET THEVARA'];
+window.bulkImportManualList = function() {
+    const manualNames = ['KKV CHEMBUMUKKU', 'MALABAR STORES KATITHARA', 'AR BAKERY (lOOSE)', 'SHIYAS NETTOR', 'MALLUS KADAVANTHRA', 'POTTAYIL STORES', 'BHASI UDHAYAMPEROOR', 'ANIL STORES PANAGAD', 'VINAYAGA MLA ROAD', 'KOTTARAM (Loose)', 'VICHOOS', 'VELIKAGATHU PANAGAD', 'JOMON JAMES THEVARA', 'SALAM (LOOSE)', 'COOP MART, ALINCHUDU', 'ALIANS (LOOSE)', 'NAZAR', 'NATHANIYA NETTOR', 'OLIPARAMBIL', 'CHARLS STORES NETTOR', 'FAMILY MINI MART THERVARA', 'MAHENDRAN STORES MLA ROAD', 'ARUN BAKERY PANAGAD', 'KANNAKATTU', 'OLIVE STORES', 'TBS, ALINCHUDU', 'HOMEYMART JANADA', 'PRIYA STORES', 'HARISREE STORES TRIPUNITURA', 'CLASSIK FORT', 'RADHA STORES TRIPUNITURA', 'POORNASREE', 'KRISHNA STORES THEVARA FERRY', 'EOS', 'MK STORES MADAVANA', 'ANJANA MADAVANA', 'MARIA KATTITHARA', 'DIVINE MADAVANA', 'JASS', 'KRK', 'SANDEEP MARADU', 'KGF, PADIVATTAM', 'KAYEES', 'ANU STORES', 'RAVI STORES PANAGAD', 'MEHRIN STORES VENNALA', 'PAINACLE, ALINCHUDU', 'SB STORES TRIPUNITURA', 'ROYAL SUPER MARKET KATHRIKADAVU', 'AJ STORES AMEDA TEMPLE', 'SP STORES EROOR', 'SREE LAKSHMI UDAYAMPEROOR', 'AR BAKERY PANAGAD', 'PRIME SUPER MARKET THEVARA', 'SABARI STORES MLA ROAD', 'KARTHIGA MLA ROAD', 'KADAKKATIL', 'AJWA SUPER MARKET', 'MADHA VEG. THEVARA', 'REYANS', 'NICE BAKERY PANAGAD', 'MALABAR KADAVANTHRA', 'JEYAN EROOR', 'HOT & COOL', 'SWEET CORNER KUMBALAM', 'JOY NIRAVATH', 'PONNUS THEVARA', 'RAGAVA STORES KADAVANDHRA', 'GRAND', 'SHOPY FRESH PANAGAD', 'SHIPYARD', 'MADHA STORES KADAVANTHRA', 'SN SUPERMARKET KADAVANTHRA', 'KALABHAM', 'KUMBALAM (LOOSE)', 'DQ STORES, KENNADIMUKKU', 'VELAYUDHAN TRIPUNITURA', 'DREAMS FOOT WEAR NETTOR', 'THOMMIS PUDHIYAKAVU', 'USHA GANDHI SQUARE', 'JALEEL KUNDANOOR', 'DARSHANA VENNALA', 'GURUVAYOOR PAPPADAM, TRIPUNITHURA', 'SAJU STORES', 'SHAJI STORES THEVARA', 'NIRMAL STORES KUNDANOOR', 'BISMI STORES NETTOR', 'USHA SN PARK', 'AMMUS STORES JANADHA', 'KRISHNA (LOOSE)', 'RUBY', 'AMALA STORES', 'SINDHU, CHEMBUMUKKU', 'PALATHINGAL', 'SHAMSHU MARADU', 'SUDHARSHAN', 'RAHUL STORES UDHAYAMPEROOR', 'NEPOLIAN NETTOR', 'VBAZAR MADAVANA', 'ROYAL BAKERY, EROOR', 'GG MART', 'CHEMBU BAKERY, CHEMBUMUKKU', 'LALSON UDHAYAKAVALA', 'KM STORES, TRIPUNITHURA', 'RADHAKRISHNAN EROOR', 'AS METRO MART', 'MFM, THEVARA', 'FOUR STAR MADAVANA', 'SUPER BAKERY PANAMPILLY NAGAR', 'SREELAYA STORES NETTOR', 'DAILY HOME NEEDS', 'GAYATHRI ( LOOSE)', 'WILSON', 'TMART', 'MALABAR BAKERY VENNALA', 'SN GANDHI NAGAR', 'USHA KOTTARAM', 'PARTHAS', 'KKAR NETTOR', 'HOME MART CHEMBUMUKKU', 'ROYAL NETTOR', 'JAFER NETTOR', 'ALMA BAKERY', 'GIRISH', 'CHAKKALAKKAL', 'HIGH RANGE', 'KERALA STORES PANANGAD', 'GROSERY HUBS, CHEMBUMUKKU', 'AS PALACHARAKUKADA', 'VELIYIL STORES', 'ADHAYAKADA', 'EXPRESS VEGITABLES', 'NANDANA MARADU', 'LOTUS PROVISIONS, VAZHAKALA', 'ST. MARYS THEVARA', 'LALS INN GRAND', 'AN STORES KATITHARA', 'V BAZAR MADAVANA', 'ZERA MINIMART', 'AMMU STORES MOOLEPADAM', 'JOYS STORES KUMBALAM', 'NEW MASJID VENNALA', 'ATLANTIS', 'DARSHANA', 'SS STORES', "PAPPA'S", 'ST MARYS', 'LALAN PANAGAD', 'HEAVENLY BAKERS KATITHARA', 'SREELAKSHMI NETTOR (SHIBU)', 'NIYA STORES KATITHARA', 'KM STORES THEVARA', 'SALIM NETTOR', 'MANI STORES PANAGAD', 'ST JOSEPH KADAVANTHRA', 'ST MARYS UDHAYAMPEROOR', 'ODEES CHIPS, TRIPUNITURA', 'HISHIGHNESS SUPER MARKET TRPT', 'LATHA STORES KATITHARA', 'SRECCS', 'SREELAKSHMI (CHATTY KADA) MARADU', 'BISMI STORES UDHAYAMPEROOR', 'NISHA STORES MARADU', 'LAKSHMI STORES, CHEMBUMUKKU', 'PRAVELIL KUMBALAM', 'ANNA BAKERY', 'JEYAN STORES VENNALA', 'SUBWAY', 'TEA CUP', 'NEW KOTTARAM (LOOSE)', 'JOHNS KATITHARA', 'HOT CUP, VAZHAKALA', 'JJOHNS HOSPITALITY', 'GOWRI STORES MLA ROAD', 'PUTHENVEETIL NETTOR', 'JOY STORES THEVARA', 'MALIAKKAL', 'SI BAKERY THEVARA', 'MINNUMART ROAD', 'USHA NUCLEUS', 'ANJAL KATITHARA', 'ROYAL BAKERY, MARKET ROAD, TRIPUNITURA', 'MILMA THEVARA', 'CHOICE BAKERY, TRIPUNITURA', 'VASINIO', 'ANGEL PROVISIONS THEVARA', 'VYSAKH', 'JANADHA MARGIN', 'JEYA BAKERY MULANTHURUTHY', 'SAROMA STORES', 'LITTLE MARKET THEVARA', 'GREEN KART, ALINCHUDU', 'SWAD SWEETS AND SNACKS, TRIPUNITURA', 'TJS NETTOR', 'AV MART TRAPUNITURA', 'VIJAYA BAKERY', 'ABDULLA STORES VENNALA', 'DIVINE KUMBALAM', 'VIJAYAN PETTA', 'SIDDARTH KAKKANAD', 'KR STORES, PALARIVATTAM', 'BROWNS BAKERY THEVARA', 'SREEKRISHNA UDHAYATHINVATHIL', 'TKM FRESH MART', 'GREEN FRESH', 'KL', 'HILLPALACE', 'AJITHA(LOOSE)', 'ARYA STORES MLA ROAD', 'SHARADHA THEVARA', 'SUPER BAKERY PERUMANOOR', 'KANNADIYIL', 'SREE KRISHNA, NETTOR', 'CKP', 'JEYAN NETTOR', 'SWAMYS (Loose)', 'HOMES', 'VELAYUDHAN THEVARA', 'PHILOMINA', 'SUDHAGARAN NADAKKAVU', 'MAHADEVA STORES KATITHARA', 'MINI TEA STALL, PUDHIYA ROAD', 'SINDHU NORTH (LOOSE)', 'LEELA FOOD / SIJO', 'MARGIN FREE, THEVARA', 'SHILIKUMAR, PUDHIYAROAD', 'ROYAL BAKERY MARADU', 'MT MART NETTOR', 'RAVI STORES KATITHARA', 'CMA', 'PADMANABAN PANAGAD', 'DEVI FANCY', 'SREEKRISHNA ENTERPRISES TRIPUNITURA', 'ROYAL BAKERS UDHAYAMPEROOR', 'AJ STORES KATITHARA', 'ARUVELIL', 'SUPER BAKERY MATTAMAL THEVARA', 'JJ PROVISIONS', 'MARIA STORES', 'SINI EROOR', 'BAKE AND TAKE NETTOR', 'GRK', 'THOTTATHIL BABU MARADU', 'ANNADHA(LOOSE)', 'SATHAR VEG', 'PM STORES', 'PRASANTH THEVARA FERRY', 'SUVIK, TRIPUNITHURA', 'GRAND STORES GANDHI SQUARE', 'AMBADY', 'USHA PANDAVAM', 'MALEKKAD', 'NITHA SUDESH', 'RAJESH STORES EROOR', 'PICKZIMART VENNALA', 'KINGINI MARADU', 'AJ STORES MLA ROAD', 'RADHA', 'SAKETH', 'TK SLEEBA', 'PRIDE STORES KUNDANOOR', 'KRISHNAKUMAR MARADU', 'BABU KOTTAYATHUPARA', 'KAIRALI SUPER MARKET', 'BABYS BAKERY NETTOR', 'BALAN STORES TRIPUNITHURA', 'FATHIMA STORES KADAVANTHRA', 'ROYAL BAKERS MULANTHURUTHY', 'HOSPITAL SHOP NETTOR', 'JAISHA BAKERY', 'NM STORES PANAGAD', 'WILL MART KADAVANTHRA', 'LOEL BAKERY', 'SAMRUTHI SUPER MARKET', 'FATHIMA BAKERY NETTOR', 'SAJITH BAKERY PANAGAD', 'PAPILON SUPER STORES', 'KALLUPURAKKAL KATITHARA', 'KUMAR BAKERS, TRIPUNITURA', 'KEETHARAYIL STORES KUNDANOOR', 'KARTHIGA NETTOR', 'DHYAN STORES TRIPUNITURA', 'DAY TO DAY MINI MART', 'AISWARYA COOL BAR', 'MAGIC OVEN KADAVANTHRA', 'ALIF MART MOOLEPADAM', 'AKR PANAGAD', 'SHIJI BAKERY KATTITHARA', 'WEONE', 'ANJANEYA STORES TRIPUNITURA', 'REAL STORES', 'TRUE BELL THEVARA', 'ABDU VEGITABLES VENNALA', 'COLLEGE CANTEEN (LOOSE)', 'KRISHNA STORES KANIYAMPUZHA', 'PATHEMARI', 'ALI STORES VENNALA', 'MN', 'PRINCE STORES', 'PRAGASAN JANADHA ROAD MARADU', 'NEW STAR UDHAYAMPEROOR', 'MARIYA KUNDANOOR', 'SRP', 'RAVI CHELLUCIRA BHAGAVATHY TEMPLE', 'AMK PANAGAD', 'GLOBAL FRESH NETTOR', 'PRANAVAM CHEMBUMUKKU', 'KOTHARI SUPER MARKET', 'KRISHNA STORES (NEW)', 'TEA BAY KUMBALAM', 'PAULY STORES THEVARA', 'DARSHANA EROOR', 'VALLUVASSERY KADAVANTHRA', 'SUJITH THATTUKADA', 'AREENA', 'ST THOMAS MULANTHURUTHY', 'K&K', 'BEST BAKERS nr THURUTHY TEMPLE', 'AMEYA ANANDHU', 'JACKSON THEVARA', 'HOMEY MART JANADHA', 'PRIDE STORES', 'KEEDHARAYIL', 'SHILIKUMAR', 'Retail loose (kkshop)', 'HABIT EAT(LOOSE)', 'MARGIN FREE MARKET THEVARA'];
     
     let added = 0;
     manualNames.forEach(name => {
@@ -443,14 +547,60 @@ function bulkImportManualList() {
     });
 
     if(added > 0) {
-        db.collection("data").doc("clients_v4").set({ list: clientDB }).then(() => {
+        setDoc(doc(db, "data", "clients_v4"), { list: clientDB }).then(() => {
             alert(`✅ Successfully imported ${added} new clients from the list.`);
             refreshUI();
         });
     } else {
         alert("ℹ️ All clients in the list are already in your register.");
     }
-}
+};
+
+window.dbDoctor = async function() {
+    if(!confirm("This will merge data from legacy documents (clients, staff, erp, routeMaster) into the new version (v4). Continue?")) return;
+    
+    const docsToFix = [
+        { old: "clients", new: "clients_v4" },
+        { old: "staff", new: "staff_v4" },
+        { old: "erp", new: "erp_v4" },
+        { old: "routeMaster", new: "routeMaster_v4" }
+    ];
+
+    let fixedCount = 0;
+    for(const pair of docsToFix) {
+        try {
+            const oldSnap = await getDoc(doc(db, "data", pair.old));
+            const newSnap = await getDoc(doc(db, "data", pair.new));
+            
+            if(oldSnap.exists()) {
+                const oldData = oldSnap.data();
+                let newData = newSnap.exists() ? newSnap.data() : null;
+                
+                if(Array.isArray(oldData.list)) {
+                    // For clients, staff, routeMaster (lists)
+                    let mergedList = newData && Array.isArray(newData.list) ? [...newData.list] : [];
+                    oldData.list.forEach(item => {
+                        const itemName = typeof item === 'string' ? item : item.name;
+                        if(!mergedList.find(x => (typeof x === 'string' ? x : x.name) === itemName)) {
+                            mergedList.push(item);
+                        }
+                    });
+                    await setDoc(doc(db, "data", pair.new), { list: mergedList });
+                } else {
+                    // For ERP data (date keys)
+                    const mergedData = { ...(newData || {}), ...oldData };
+                    await setDoc(doc(db, "data", pair.new), mergedData);
+                }
+                fixedCount++;
+                console.log(`Successfully merged ${pair.old} into ${pair.new}`);
+            }
+        } catch (e) {
+            console.error(`Error fixing ${pair.old}:`, e);
+        }
+    }
+    alert(`✅ Database Sync Complete! Fixed/Merged ${fixedCount} documents.\n\nAll apps will now see the same data.`);
+    location.reload();
+};
 
 loadData();
 document.getElementById('prodDate').value = currentDate;

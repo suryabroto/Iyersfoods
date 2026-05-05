@@ -1150,8 +1150,9 @@ function handleAddDelivery() {
 }
 
 function handleAddReturn() {
-    const shop = retShop.value;
-    if(!shop) return alert("Select Shop");
+    const shop = activeShop.value;
+    if(shop === "ALL") return alert("Please select a specific Shop first");
+
     const qty = Number(retQty.value);
     if(qty <= 0) return;
     
