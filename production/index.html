@@ -771,38 +771,42 @@ window.handleClientInput = handleClientInput;
 /* --- DATA HANDLING --- */
 function loadDataFromStorage() {
     const docRef = doc(db, "data", "erp_v4");
-    onSnapshot(docRef, (snapshot) => {
-        if(!snapshot.exists()) return;
-        const data = snapshot.data();
-        if(data) {
-            erpData = data; 
-            repairData();
-            if(currentDate && !erpData[currentDate]) {
-                erpData[currentDate] = { productions: [], deliveries: [], staffDeclarations: [], returns: [] };
-            }
-            syncWindow();
-            render();
-        }
-    }, (error) => {
-        console.error("Firestore read error:", error);
-    });
-
-    getDoc(docRef).then((snapshot) => {
-        const raw = localStorage.getItem(DB_KEY);
-        const localData = raw ? JSON.parse(raw) : null;
-        const firestoreData = snapshot.exists() ? snapshot.data() : null;
-
-        // SAFETY MERGE: If Firestore is empty (or just reset) but we have local data,
-        // we restore the local data back to Firestore.
-        if (localData && Object.keys(localData).length > 0) {
-            if (!firestoreData || Object.keys(firestoreData).length === 0) {
-                console.log("⚠️ Safety Merge: Restoring production data from local cache...");
+    
+    // 1. Immediate Load from LocalStorage for speed and safety restoration
+    const raw = localStorage.getItem(DB_KEY);
+    if (raw) {
+        try {
+            const localData = JSON.parse(raw);
+            if (localData && Object.keys(localData).length > 0) {
+                console.log("📦 Loaded from Local Cache");
                 erpData = localData;
-                saveData(); // Push local back to Firestore
+                repairData();
                 syncWindow();
                 render();
             }
+        } catch(e) { console.error("Cache read error", e); }
+    }
+
+    // 2. Real-time listener
+    onSnapshot(docRef, (snapshot) => {
+        if(!snapshot.exists()) return;
+        const data = snapshot.data();
+        
+        // Only overwrite if the Firestore data is NOT empty
+        // or if we don't have local data yet.
+        if (data && Object.keys(data).length > 0) {
+            console.log("🔥 Syncing from Firestore");
+            erpData = data; 
+            repairData();
+            syncWindow();
+            render();
+        } else if (erpData && Object.keys(erpData).length > 0) {
+            // Firestore is empty but we have local data -> PUSH IT
+            console.log("📤 Restoring local data to empty Firestore...");
+            saveData();
         }
+    }, (error) => {
+        console.error("Firestore read error:", error);
     });
 }
 function saveData() { 
