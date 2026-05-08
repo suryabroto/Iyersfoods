@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Delivery Data Cleanup</title>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; background: #f4f7f6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        h1 { color: #d32f2f; margin-top: 0; }
+        #status { font-weight: bold; margin-bottom: 20px; padding: 15px; border-radius: 8px; background: #fff3e0; border: 1px solid #ffe0b2; }
+        .log-box { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 13px; max-height: 300px; overflow-y: auto; }
+        .success { color: #2e7d32 !important; background: #e8f5e9 !important; border-color: #c8e6c9 !important; }
+        .error { color: #c62828 !important; background: #ffebee !important; border-color: #ffcdd2 !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Delivery Data Cleanup</h1>
+        <p>This will clear all daily sales entries, trips, and tally data from the Delivery system to allow for a fresh start.</p>
+        <p><strong>Note:</strong> Delivery Boys and Client Register will NOT be deleted.</p>
+        
+        <div id="status">Ready to start...</div>
+        <div id="log" class="log-box"></div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
+            authDomain: "iyers-c0944.firebaseapp.com",
+            projectId: "iyers-c0944",
+            storageBucket: "iyers-c0944.firebasestorage.app",
+            messagingSenderId: "234376255779",
+            appId: "1:234376255779:web:8f4b43ff3f66cfd4071496"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+
+        function log(msg) {
+            const div = document.createElement('div');
+            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(div);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        async function clearDeliveryData() {
+            try {
+                statusEl.innerText = "⏳ Initializing cleanup...";
+                log("Starting Delivery cleanup process...");
+
+                // 1. Clear legacy route document in 'data' collection
+                log("Checking legacy 'route' document...");
+                await db.collection("data").doc("route").delete();
+                await db.collection("data").doc("route").set({});
+                log("✅ Legacy 'route' document reset.");
+
+                // 2. Clear routeDays collection
+                log("Fetching all documents from 'routeDays' collection...");
+                const snapshot = await db.collection("routeDays").get();
+                const total = snapshot.size;
+                
+                if (total === 0) {
+                    log("ℹ️ No documents found in 'routeDays'.");
+                } else {
+                    log(`Found ${total} daily entry documents.`);
+                    let count = 0;
+                    
+                    // Batch deletion for efficiency
+                    const docs = snapshot.docs;
+                    for (const doc of docs) {
+                        await doc.ref.delete();
+                        count++;
+                        if (count % 10 === 0 || count === total) {
+                            statusEl.innerText = `⏳ Deleted ${count} / ${total} documents...`;
+                            log(`Deleted ${count} documents...`);
+                        }
+                    }
+                    log(`✅ Successfully deleted all ${total} documents from 'routeDays'.`);
+                }
+
+                statusEl.innerText = "🎉 Success! Delivery sales data cleared.";
+                statusEl.className = "success";
+                log("Cleanup complete. You can now start fresh.");
+            } catch (error) {
+                console.error(error);
+                statusEl.innerText = "❌ Error: " + error.message;
+                statusEl.className = "error";
+                log("FATAL ERROR: " + error.message);
+            }
+        }
+
+        // Run automatically
+        clearDeliveryData();
+    </script>
+</body>
+</html>

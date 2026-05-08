@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Database Cleanup</title>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <h1>Cleaning Production Data...</h1>
+    <div id="status">Starting...</div>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
+            authDomain: "iyers-c0944.firebaseapp.com",
+            projectId: "iyers-c0944",
+            storageBucket: "iyers-c0944.firebasestorage.app",
+            messagingSenderId: "234376255779",
+            appId: "1:234376255779:web:8f4b43ff3f66cfd4071496"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        async function clearData() {
+            const status = document.getElementById('status');
+            const log = (msg) => {
+                console.log(msg);
+                const div = document.createElement('div');
+                div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                document.body.appendChild(div);
+            };
+
+            try {
+                // 1. Clear erp_v4
+                log("Deleting erp_v4...");
+                await db.collection("data").doc("erp_v4").delete();
+                await db.collection("data").doc("erp_v4").set({});
+                log("erp_v4 reset");
+
+                // 2. Clear legacy route
+                log("Deleting legacy route doc...");
+                await db.collection("data").doc("route").delete();
+                await db.collection("data").doc("route").set({});
+                log("legacy route reset");
+
+                // 3. Clear routeDays collection
+                log("Fetching routeDays documents...");
+                const snapshot = await db.collection("routeDays").get();
+                const total = snapshot.size;
+                log(`Found ${total} documents in routeDays`);
+                
+                let count = 0;
+                const docs = snapshot.docs;
+                
+                for (const doc of docs) {
+                    await doc.ref.delete();
+                    count++;
+                    if (count % 20 === 0) {
+                        status.innerText = `Deleted ${count} / ${total} from routeDays...`;
+                        log(`Deleted ${count}/${total} documents`);
+                    }
+                }
+                
+                status.innerText = "Success! All sales and entry data cleared. Staff and Client registers were NOT touched.";
+                log("Cleanup complete");
+            } catch (error) {
+                status.innerText = "Error: " + error.message;
+                log("FATAL ERROR: " + error.message);
+            }
+        }
+
+        clearData();
+    </script>
+</body>
+</html>
