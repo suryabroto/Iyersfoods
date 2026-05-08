@@ -1089,8 +1089,13 @@
         const sel = document.getElementById('globalDriverSelect');
         if (sel && sel.value !== driver) sel.value = driver;
 
+        // Sync with Trip Form
+        const tripDriver = document.getElementById('tripDriver');
+        if (tripDriver) tripDriver.value = driver;
+
         renderStats();
         renderShops();
+        renderLogs();
         renderDeliveryMemberLogs();
         renderCreditAlerts();
     }
@@ -1102,6 +1107,8 @@
         
         const tripSel = document.getElementById('tripActualDriver');
         if (tripSel) tripSel.value = driver;
+
+        refreshDynamicUI();
     }
 
     function openDatePicker() {
@@ -1676,20 +1683,30 @@
         }
         
         let shownCount = 0;
-        const listToIterate = searchVal ? SHOP_LIST : (currentData.activeShops || []);
+        // Logic: Show shops that HAVE activity today OR shops that historically belong to this route (if no search)
+        const listToIterate = SHOP_LIST; 
         let htmlBuffer = "";
         
         listToIterate.forEach((shop, i) => {
-            const idx = SHOP_LIST.indexOf(shop);
-            if(idx === -1 || !currentData.shops[shop]) return;
+            const idx = i;
+            const data = currentData.shops[shop] || { dosa:{}, appam:{} };
+            const hasActivity = hasShopEntryActivity(data);
             
+            // Filtering Logic:
+            // 1. If searching, match by name.
+            // 2. If not searching:
+            //    - Show if it has activity today AND matches the route.
+            //    - Show if it belongs to this route historically (even if no activity yet).
             const matchesSearch = !searchVal || shop.toLowerCase().includes(searchVal);
             if(!matchesSearch) return;
 
-            const data = currentData.shops[shop];
-            const hasActivity = hasShopEntryActivity(data);
-            if(filterDriver && hasActivity && data.driver && data.driver !== filterDriver) return;
-            if (!searchVal && !hasActivity) return;
+            if(!searchVal) {
+                const ownerDriver = data.driver || getLastDriver(shop, selectedDate);
+                const isRouteMatch = (ownerDriver === filterDriver);
+                if(!isRouteMatch) return;
+            } else {
+                // If searching, we show anything that matches the name
+            }
 
             const pD = getPrice(shop, 'dosa');
             const pA = getPrice(shop, 'appam');
@@ -1946,7 +1963,10 @@
         if(!catData) return;
             
             // 2. Aggregate LOADS (Trips)
-            if (cat === currentCategory) {
+            // If in Packet (Combined) view, aggregate trips from all processed categories
+            // Otherwise, only aggregate for the specific category being processed
+            const processTrips = (currentCategory === 'PACKET') || (cat === currentCategory);
+            if (processTrips) {
                 const trips = (catData.trips || []).filter(t => !filterDriver || t.driver === filterDriver);
                 trips.forEach(t => {
                     stats.dosa.load += Number(t.dosa) || 0;
