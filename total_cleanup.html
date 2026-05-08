@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Total Cleanup</title>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <h1>🚀 Total Data Cleanup</h1>
+    <div id="status">Ready...</div>
+    <div id="log" style="font-family: monospace; white-space: pre; background: #eee; padding: 10px;"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
+            authDomain: "iyers-c0944.firebaseapp.com",
+            projectId: "iyers-c0944",
+            storageBucket: "iyers-c0944.firebasestorage.app",
+            messagingSenderId: "234376255779",
+            appId: "1:234376255779:web:8f4b43ff3f66cfd4071496"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        function log(msg) {
+            document.getElementById('log').innerHTML += msg + "\n";
+        }
+
+        async function totalCleanup() {
+            const status = document.getElementById('status');
+            try {
+                status.innerText = "⏳ Cleaning up...";
+                
+                // 1. Clear routeDays collection
+                log("Cleaning 'routeDays' collection...");
+                const routeDaysSnap = await db.collection("routeDays").get();
+                for (const doc of routeDaysSnap.docs) {
+                    await doc.ref.delete();
+                    log(` - Deleted routeDays doc: ${doc.id}`);
+                }
+                log("✅ routeDays cleared.");
+
+                // 2. Clear erp document
+                log("Resetting 'data/erp'...");
+                await db.collection("data").doc("erp").set({});
+                log("✅ data/erp reset.");
+
+                // 3. Clear erp_v4 document
+                log("Resetting 'data/erp_v4'...");
+                await db.collection("data").doc("erp_v4").set({});
+                log("✅ data/erp_v4 reset.");
+
+                // 4. Clear route document
+                log("Resetting 'data/route'...");
+                await db.collection("data").doc("route").set({});
+                log("✅ data/route reset.");
+
+                status.innerText = "🎉 SUCCESS! All entries cleared.";
+                log("\nCleanup finished. All sales, production, and route logs are gone.");
+            } catch (err) {
+                status.innerText = "❌ ERROR: " + err.message;
+                log("\nFATAL ERROR: " + err.message);
+            }
+        }
+
+        totalCleanup();
+    </script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Find Hidden Data</title>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <h1>Searching for Sales Data...</h1>
+    <div id="status">Scanning...</div>
+    <div id="results" style="font-family: monospace; white-space: pre;"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
+            authDomain: "iyers-c0944.firebaseapp.com",
+            projectId: "iyers-c0944",
+            storageBucket: "iyers-c0944.firebasestorage.app",
+            messagingSenderId: "234376255779",
+            appId: "1:234376255779:web:8f4b43ff3f66cfd4071496"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        async function findData() {
+            const res = document.getElementById('results');
+            const st = document.getElementById('status');
+
+            try {
+                // 1. Check all docs in 'data' collection
+                res.innerHTML += "--- 'data' collection docs ---\n";
+                const dataSnap = await db.collection("data").get();
+                dataSnap.forEach(doc => {
+                    const keys = Object.keys(doc.data());
+                    res.innerHTML += ` - ${doc.id} (keys: ${keys.length})\n`;
+                    if (doc.id.includes("route") || doc.id.includes("sales") || doc.id.includes("erp")) {
+                         // Check if any key looks like a date (YYYY-MM-DD)
+                         const dates = keys.filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
+                         if (dates.length > 0) {
+                             res.innerHTML += `    !!! Found ${dates.length} date-keys in ${doc.id}\n`;
+                         }
+                    }
+                });
+
+                // 2. Check 'routeDays' collection again
+                res.innerHTML += "\n--- 'routeDays' collection docs ---\n";
+                const routeDaysSnap = await db.collection("routeDays").get();
+                res.innerHTML += ` Total docs: ${routeDaysSnap.size}\n`;
+                routeDaysSnap.forEach(doc => {
+                    res.innerHTML += ` - ${doc.id}\n`;
+                });
+
+                // 3. Check for a collection named 'route' (not doc in data)
+                res.innerHTML += "\n--- Checking for 'route' collection ---\n";
+                const routeColSnap = await db.collection("route").limit(5).get();
+                res.innerHTML += ` Empty? ${routeColSnap.empty}\n`;
+                routeColSnap.forEach(doc => {
+                    res.innerHTML += ` - ${doc.id}\n`;
+                });
+
+                st.innerText = "Scan complete.";
+            } catch (err) {
+                st.innerText = "Error: " + err.message;
+            }
+        }
+
+        findData();
+    </script>
+</body>
+</html>

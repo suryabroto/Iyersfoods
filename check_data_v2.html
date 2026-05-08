@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Check Firestore Data</title>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <h1>Firestore Data Status</h1>
+    <div id="status">Checking...</div>
+    <div id="results" style="font-family: monospace; white-space: pre;"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
+            authDomain: "iyers-c0944.firebaseapp.com",
+            projectId: "iyers-c0944",
+            storageBucket: "iyers-c0944.firebasestorage.app",
+            messagingSenderId: "234376255779",
+            appId: "1:234376255779:web:8f4b43ff3f66cfd4071496"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        async function checkData() {
+            const results = document.getElementById('results');
+            const status = document.getElementById('status');
+
+            try {
+                // Check routeDays collection
+                const routeDaysSnap = await db.collection("routeDays").get();
+                results.innerHTML += `Documents in 'routeDays': ${routeDaysSnap.size}\n`;
+                routeDaysSnap.forEach(doc => {
+                    results.innerHTML += ` - ${doc.id}\n`;
+                });
+
+                // Check data/route
+                const routeDoc = await db.collection("data").doc("route").get();
+                results.innerHTML += `\ndata/route exists: ${routeDoc.exists}\n`;
+                if (routeDoc.exists) {
+                    results.innerHTML += ` data/route keys: ${Object.keys(routeDoc.data()).length}\n`;
+                }
+
+                // Check for other collections
+                // We can't list collections in Web SDK, but we can check common names
+                const collectionsToCheck = ["route", "dailySales", "entries", "delivery"];
+                for (const col of collectionsToCheck) {
+                    const snap = await db.collection(col).limit(1).get();
+                    results.innerHTML += `\nCollection '${col}' exists: ${!snap.empty}\n`;
+                }
+
+                status.innerText = "Check complete.";
+            } catch (err) {
+                status.innerText = "Error: " + err.message;
+                console.error(err);
+            }
+        }
+
+        checkData();
+    </script>
+</body>
+</html>

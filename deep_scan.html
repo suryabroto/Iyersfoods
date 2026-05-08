@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Deep Scan Firestore</title>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <h1>Deep Scanning for 'AJITHA'...</h1>
+    <div id="status">Searching...</div>
+    <div id="results" style="font-family: monospace; white-space: pre;"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBIGt_8Ty4Ufz9cpRfrLgbKgStb0j81Sto",
+            authDomain: "iyers-c0944.firebaseapp.com",
+            projectId: "iyers-c0944",
+            storageBucket: "iyers-c0944.firebasestorage.app",
+            messagingSenderId: "234376255779",
+            appId: "1:234376255779:web:8f4b43ff3f66cfd4071496"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        async function deepScan() {
+            const res = document.getElementById('results');
+            const st = document.getElementById('status');
+
+            const collectionsToTry = [
+                "routeDays", "data", "route", "dailySales", "entries", "delivery", 
+                "erp", "production", "dispatch", "returns", "declarations",
+                "logs", "history", "transactions"
+            ];
+
+            try {
+                for (const colName of collectionsToTry) {
+                    res.innerHTML += `Checking collection: ${colName}...\n`;
+                    const snap = await db.collection(colName).get();
+                    if (snap.empty) {
+                        res.innerHTML += `  - Empty\n`;
+                        continue;
+                    }
+
+                    snap.forEach(doc => {
+                        const dataStr = JSON.stringify(doc.data());
+                        if (dataStr.includes("AJITHA")) {
+                            res.innerHTML += `  !!! FOUND 'AJITHA' in [${colName}] doc [${doc.id}]\n`;
+                            // Print keys to see structure
+                            res.innerHTML += `      Keys: ${Object.keys(doc.data()).join(", ")}\n`;
+                        }
+                    });
+                }
+
+                st.innerText = "Scan complete.";
+            } catch (err) {
+                st.innerText = "Error: " + err.message;
+            }
+        }
+
+        deepScan();
+    </script>
+</body>
+</html>
