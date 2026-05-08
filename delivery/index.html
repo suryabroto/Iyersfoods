@@ -808,7 +808,8 @@
             dosa: { sale: '', cr: '', dmg: '', free: '' },
             appam: { sale: '', cr: '', dmg: '', free: '' },
             cashReceived: '',
-            gpayReceived: ''
+            gpayReceived: '',
+            anandReceived: ''
         };
     }
 
@@ -853,20 +854,20 @@
             const pA = getPrice(shop, 'appam');
             sold += ((Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0)) * pD;
             sold += ((Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0)) * pA;
-            paid += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
+            paid += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0) + (Number(s.anandReceived) || 0);
         });
         return { sold, paid };
     }
 
     function getPaymentTotal(shopData) {
-        return (Number(shopData?.cashReceived) || 0) + (Number(shopData?.gpayReceived) || 0);
+        return (Number(shopData?.cashReceived) || 0) + (Number(shopData?.gpayReceived) || 0) + (Number(shopData?.anandReceived) || 0);
     }
 
     function hasShopEntryActivity(shopData) {
         return !!(
             shopData?.dosa?.sale || shopData?.dosa?.cr ||
             shopData?.appam?.sale || shopData?.appam?.cr ||
-            shopData?.cashReceived || shopData?.gpayReceived
+            shopData?.cashReceived || shopData?.gpayReceived || shopData?.anandReceived
         );
     }
 
@@ -895,7 +896,7 @@
                     dosa += dQty;
                     appam += aQty;
                     value += dQty * getPrice(shop, 'dosa') + aQty * getPrice(shop, 'appam');
-                    cash += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
+                    cash += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0) + (Number(s.anandReceived) || 0);
                 });
                 return { date, dosa, appam, value, cash };
             })
@@ -952,12 +953,12 @@
                 const tds = document.getElementById('tripDriver');
                 
                 if(gds) {
-                    const current = gds.value;
+                    const current = gds.value || selectedDriver;
                     gds.innerHTML = '<option value="">Select Route</option>' + routes.map(d => `<option>${d}</option>`).join("");
                     gds.value = current;
                 }
                 if(tds) {
-                    const current = tds.value;
+                    const current = tds.value || selectedDriver;
                     tds.innerHTML = '<option value="">Select Route...</option>' + routes.map(d => `<option>${d}</option>`).join("");
                     tds.value = current;
                 }
@@ -975,12 +976,12 @@
                 const tads = document.getElementById('tripActualDriver');
                 
                 if(gads) {
-                    const current = gads.value;
+                    const current = gads.value || selectedActualDriver;
                     gads.innerHTML = '<option value="">Select Driver</option>' + drivers.map(d => `<option>${d}</option>`).join("");
                     gads.value = current;
                 }
                 if(tads) {
-                    const current = tads.value;
+                    const current = tads.value || selectedActualDriver;
                     tads.innerHTML = '<option value="">Select Driver...</option>' + drivers.map(d => `<option>${d}</option>`).join("");
                     tads.value = current;
                 }
@@ -1000,10 +1001,15 @@
             // The user can navigate to other dates using the calendar, but refresh
             // always snaps back to the current working day.
             const today = new Date().toISOString().split('T')[0];
-            const lastDate = today; // FIX: always today on refresh
-            selectedDate = lastDate;
+            selectedDate = today;
             
-            // Priority 2: Initialize basic structure so buttons don't crash
+            // Priority 2: Restore Selection Persistence (Route & Driver)
+            const savedRoute = localStorage.getItem('IYERS_PERSIST_ROUTE');
+            const savedDriver = localStorage.getItem('IYERS_PERSIST_DRIVER');
+            if (savedRoute) selectedDriver = savedRoute;
+            if (savedDriver) selectedActualDriver = savedDriver;
+
+            // Priority 3: Initialize basic structure so buttons don't crash
             if (!globalDB[selectedDate]) globalDB[selectedDate] = getEmptyRouteDay();
             globalDB[selectedDate] = normalizeRouteDay(globalDB[selectedDate], currentCategory);
             currentData = globalDB[selectedDate][currentCategory];
@@ -1085,6 +1091,7 @@
 
     function setGlobalDriver(driver) {
         selectedDriver = driver;
+        localStorage.setItem('IYERS_PERSIST_ROUTE', driver);
         
         const sel = document.getElementById('globalDriverSelect');
         if (sel && sel.value !== driver) sel.value = driver;
@@ -1102,6 +1109,8 @@
 
     function setGlobalActualDriver(driver) {
         selectedActualDriver = driver;
+        localStorage.setItem('IYERS_PERSIST_DRIVER', driver);
+        
         const sel = document.getElementById('globalActualDriverSelect');
         if (sel && sel.value !== driver) sel.value = driver;
         
@@ -1239,6 +1248,24 @@
 
         currentData.shops[shop] = normalizeShopEntry(currentData.shops[shop]);
         currentData.shops[shop].gpayReceived = val;
+        if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
+        saveData();
+        updateShopRowUI(shop); 
+        updateShopBalance(shop, idx);
+        refreshDynamicUI();
+    }
+
+    function updateAnandReceived(shop, val, idx) {
+        if(!selectedDriver) {
+            alert("⚠️ PLEASE SELECT A DRIVER FIRST!\n\nEvery driver delivers to different shops. Please select a driver from the chips above before entering sales data.");
+            renderShops();
+            return;
+        }
+        if(!currentData.activeShops) currentData.activeShops = [];
+        if(!currentData.activeShops.includes(shop)) currentData.activeShops.push(shop);
+
+        currentData.shops[shop] = normalizeShopEntry(currentData.shops[shop]);
+        currentData.shops[shop].anandReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
         saveData();
         updateShopRowUI(shop); 
@@ -1781,6 +1808,13 @@
                                 oninput="updateGpayReceived('${shop}', this.value, ${idx})" 
                                 value="${data.gpayReceived || ''}" placeholder="Enter Gpay amount...">
                         </div>
+                        <div style="margin-bottom:12px">
+                            <label style="font-size:10px; font-weight:700; color:#64748b; display:block; margin-bottom:4px">TOTAL ANAND RECEIVED</label>
+                            <input type="number" class="qty-input" style="width:100%; font-size:16px; font-weight:700; background:#fff1f2; border-color:#fda4af" 
+                                data-focus-id="anand-${idx}"
+                                oninput="updateAnandReceived('${shop}', this.value, ${idx})" 
+                                value="${data.anandReceived || ''}" placeholder="Enter Anand amount...">
+                        </div>
                         <div style="padding:10px; background:#f1f5f9; border-radius:6px; text-align:center; border:1px solid #e2e8f0">
                             <div style="font-size:9px; font-weight:700; color:#64748b; margin-bottom:2px">CLOSING BALANCE</div>
                             <div style="font-size:18px; font-weight:800" id="balance-${idx}">₹0</div>
@@ -1936,10 +1970,13 @@
             credits: [],
             totalCashCollected: 0,
             totalGpayCollected: 0,
+            totalAnandCollected: 0,
             cashPacket: 0,
             cashLoose: 0,
             gpayPacket: 0,
             gpayLoose: 0,
+            anandPacket: 0,
+            anandLoose: 0,
             totalExpenses: 0,
             totalExtraIncome: 0,
             totalOutstanding: 0,
@@ -2014,18 +2051,22 @@
                     stats.appam.free += aFree;
                 }
 
-                // Cash & Gpay Collected
+                // Cash, Gpay & Anand Collected
                 const cash = (Number(s.cashReceived) || 0);
                 const gpay = (Number(s.gpayReceived) || 0);
+                const anand = (Number(s.anandReceived) || 0);
                 stats.totalCashCollected += cash;
                 stats.totalGpayCollected += gpay;
+                stats.totalAnandCollected += anand;
                 
                 if(cat === 'PACKET') {
                     stats.cashPacket += cash;
                     stats.gpayPacket += gpay;
+                    stats.anandPacket += anand;
                 } else if(cat === 'LOOSE') {
                     stats.cashLoose += cash;
                     stats.gpayLoose += gpay;
+                    stats.anandLoose += anand;
                 }
                 
                 allShopsSet.add(shop);
@@ -2052,7 +2093,7 @@
                 const pA = getPrice(shop, 'appam');
                 todaySaleVal += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * pD + 
                                ((Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0)) * pA;
-                shopCashRec += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0);
+                shopCashRec += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0) + (Number(s.anandReceived) || 0);
                 if (cat === currentCategory) {
                     dCrTotal += (Number(s.dosa?.cr)||0);
                     aCrTotal += (Number(s.appam?.cr)||0);
@@ -2228,6 +2269,19 @@
                         <span style="color:#4f46e5; font-weight:700">Total Gpay Collected</span>
                         <span style="font-weight:800; color:#4f46e5">₹${stats.totalGpayCollected}</span>
                     </div>
+
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; padding-top:12px; border-top:2px dashed #fda4af">
+                        <span style="color:#64748b; font-size:11px; font-weight:600">Total ANAND (PACKETS)</span>
+                        <span style="font-weight:700; color:#e11d48">₹${stats.anandPacket}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px">
+                        <span style="color:#64748b; font-size:11px; font-weight:600">Total ANAND (LOOSE)</span>
+                        <span style="font-weight:700; color:#e11d48">₹${stats.anandLoose}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px">
+                        <span style="color:#e11d48; font-weight:700">Total ANAND Collected</span>
+                        <span style="font-weight:800; color:#e11d48">₹${stats.totalAnandCollected}</span>
+                    </div>
                     ` : `
                     <div style="display:flex; justify-content:space-between; margin-bottom:12px">
                         <span style="color:#64748b; font-size:11px; font-weight:600">Total Cash (LOOSE)</span>
@@ -2236,6 +2290,10 @@
                     <div style="display:flex; justify-content:space-between; margin-bottom:12px">
                         <span style="color:#64748b; font-size:11px; font-weight:600">Total Gpay (LOOSE)</span>
                         <span style="font-weight:700; color:#4f46e5">₹${stats.gpayLoose}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px">
+                        <span style="color:#64748b; font-size:11px; font-weight:600">Total ANAND (LOOSE)</span>
+                        <span style="font-weight:700; color:#e11d48">₹${stats.anandLoose}</span>
                     </div>
                     `}
                     ${stats.totalExtraIncome > 0 ? `
