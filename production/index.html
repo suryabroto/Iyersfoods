@@ -795,9 +795,16 @@ function loadDataFromStorage() {
         // Only overwrite if the Firestore data is NOT empty
         // or if we don't have local data yet.
         if (data && Object.keys(data).length > 0) {
-            console.log("🔥 Syncing from Firestore");
+            console.log("🔥 Syncing from Firestore", data);
+            
+            // Safety: Only overwrite if we don't have unsaved local changes 
+            // (Simplified: always sync for now, but log it)
             erpData = data; 
             repairData();
+            
+            if(currentDate && !erpData[currentDate]) {
+                erpData[currentDate] = { productions: [], deliveries: [], staffDeclarations: [], returns: [] };
+            }
             syncWindow();
             render();
         } else if (erpData && Object.keys(erpData).length > 0) {
@@ -811,10 +818,19 @@ function loadDataFromStorage() {
 }
 function saveData() { 
     if(!db) return console.error("DB not initialized");
-    setDoc(doc(db, "data", "erp_v4"), erpData)
-        .then(() => console.log("Firestore save success"))
+    console.log("📤 Attempting to save erpData...", erpData);
+    
+    // Sanitize data for Firestore
+    const sanitized = JSON.parse(JSON.stringify(erpData));
+    
+    setDoc(doc(db, "data", "erp_v4"), sanitized)
+        .then(() => {
+            console.log("✅ Firestore save success");
+            // Optional: Add a small toast instead of alert if it becomes annoying
+            // alert("Data Saved Successfully!"); 
+        })
         .catch(err => {
-            console.error("Firestore save failed:", err);
+            console.error("❌ Firestore save failed:", err);
             alert("Error: Data not saved to Firestore. Check rules.");
         });
 }
@@ -1097,28 +1113,31 @@ function getClientBalances(dateLimit, shop, product) {
 /* --- ACTIONS --- */
 function handleAddProduction() {
     const shop = activeShop.value;
-    if(shop === "ALL") return alert("Select Shop");
-    const qty = Number(prodQty.value);
-    if(qty <= 0) return;
-    const type = currentCategory;
+    if(shop === "ALL") return alert("Please select a specific Shop first.");
     
+    const qty = Number(prodQty.value);
+    if(qty <= 0 || isNaN(qty)) return alert("Please enter a valid quantity.");
+    
+    const type = currentCategory;
+    console.log(`➕ Adding Production: ${qty}L for ${shop} (${type})`);
+
+    // Ensure erpData structure for current date exists
+    if(!erpData[currentDate]) {
+        erpData[currentDate] = { productions: [], deliveries: [], staffDeclarations: [], returns: [] };
+    }
+    
+    const day = erpData[currentDate];
+    if(!day.batchSeq) day.batchSeq = {};
+
     // Client handling for Loose
     let client = "";
     if(type === 'LOOSE') {
         const cEl = document.getElementById('prodClient');
         if(cEl && cEl.value) client = cEl.value;
         if(!client) return alert("Please select a Client for Loose production.");
-        
-        // IMMUTABILITY: Validate against registered clients
-        if(!validateClient(client)) {
-            return showAccessDenied(client, 'prodClient');
-        }
+        if(!validateClient(client)) return showAccessDenied(client, 'prodClient');
     }
 
-    const day = erpData[currentDate];
-    if(!day.batchSeq) day.batchSeq = {}; // Ensure init
-
-    // Use Active Batch Code
     const batchName = getCurrentBatchCode(); 
 
     if(editState.prod) {
@@ -1126,18 +1145,42 @@ function handleAddProduction() {
         if(idx !== -1) day.productions[idx] = { ...day.productions[idx], shop, staff: activeStaff.value, type, qty, client, bn: batchName };
         cancelEditMode('PROD');
     } else {
-        day.productions.push({ id: generateId(), shop, staff: activeStaff.value, product: currentProduct, type, qty, bn: batchName, client });
+        day.productions.push({ 
+            id: generateId(), 
+            shop, 
+            staff: activeStaff.value, 
+            product: currentProduct, 
+            type, 
+            qty, 
+            bn: batchName, 
+            client,
+            timestamp: Date.now()
+        });
     }
-    prodQty.value = ""; if(document.getElementById('prodClient')) document.getElementById('prodClient').value = "";
-    saveData(); render();
+
+    // Reset UI
+    prodQty.value = ""; 
+    if(document.getElementById('prodClient')) document.getElementById('prodClient').value = "";
+    
+    saveData(); 
+    render();
 }
 
 function handleAddDelivery() {
     const shop = activeShop.value;
-    if(shop === "ALL") return alert("Select Shop");
+    if(shop === "ALL") return alert("Please select a specific Shop first.");
+    
     const qty = Number(delQty.value);
-    if(qty <= 0) return;
+    if(qty <= 0 || isNaN(qty)) return alert("Please enter a valid quantity.");
+    
     const type = currentCategory;
+    console.log(`🚚 Adding Dispatch: ${qty}L for ${shop} (${type})`);
+
+    // Ensure erpData structure for current date exists
+    if(!erpData[currentDate]) {
+        erpData[currentDate] = { productions: [], deliveries: [], staffDeclarations: [], returns: [] };
+    }
+    
     const day = erpData[currentDate];
 
     let client = "";
@@ -1154,10 +1197,25 @@ function handleAddDelivery() {
         if(idx !== -1) day.deliveries[idx] = { ...day.deliveries[idx], shop, type, productionStaff: delProdStaff.value, deliveryStaff: delStaff.value, client, qty };
         cancelEditMode('DEL');
     } else {
-        day.deliveries.push({ id: generateId(), shop, product: currentProduct, type, productionStaff: delProdStaff.value, deliveryStaff: delStaff.value, client, qty });
+        day.deliveries.push({ 
+            id: generateId(), 
+            shop, 
+            product: currentProduct, 
+            type, 
+            productionStaff: delProdStaff.value, 
+            deliveryStaff: delStaff.value, 
+            client, 
+            qty,
+            timestamp: Date.now()
+        });
     }
-    delQty.value = ""; if(document.getElementById('delClient')) document.getElementById('delClient').value = "";
-    saveData(); render();
+
+    // Reset UI
+    delQty.value = ""; 
+    if(document.getElementById('delClient')) document.getElementById('delClient').value = "";
+    
+    saveData(); 
+    render();
 }
 
 function handleAddReturn() {
