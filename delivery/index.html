@@ -847,7 +847,7 @@
     function getShopDayValue(shop, dayData) {
         let sold = 0;
         let paid = 0;
-        ['PACKET', 'LOOSE'].forEach(cat => {
+        [currentCategory].forEach(cat => {
             const s = dayData?.[cat]?.shops?.[shop];
             if (!s) return;
             const pD = getPrice(shop, 'dosa');
@@ -888,7 +888,7 @@
             .map(date => {
                 const dayData = globalDB[date] || {};
                 let dosa = 0, appam = 0, value = 0, cash = 0;
-                ['PACKET', 'LOOSE'].forEach(cat => {
+                [currentCategory].forEach(cat => {
                     const s = dayData?.[cat]?.shops?.[shop];
                     if (!s) return;
                     const dQty = (Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0);
@@ -911,7 +911,7 @@
             .reduce((found, date) => {
                 if (found) return found;
                 const dayData = globalDB[date] || {};
-                for (const cat of ['PACKET', 'LOOSE']) {
+                for (const cat of [currentCategory]) {
                     const driver = dayData?.[cat]?.shops?.[shop]?.driver;
                     if (driver) return driver;
                 }
@@ -1289,14 +1289,6 @@
 
         addShop(currentData.shops[shop]);
 
-        const dayData = globalDB[selectedDate];
-        if (dayData) {
-            Object.keys(dayData).forEach(cat => {
-                if (cat === currentCategory) return;
-                addShop(dayData[cat]?.shops?.[shop]);
-            });
-        }
-
         const balance = prevDues + todayBillValue - paid;
         const balEl = document.getElementById(`balance-${idx}`);
         const totEl = document.getElementById(`total-${idx}`);
@@ -1312,16 +1304,14 @@
 
     function updateShopRowUI(shop) {
         const idx = SHOP_LIST.indexOf(shop);
-        const dayData = globalDB[selectedDate] || {};
         let totalPaidToday = 0;
         let hasActivity = false;
 
-        Object.keys(dayData).forEach(cat => {
-            const s = dayData[cat]?.shops?.[shop];
-            if (!s) return;
-            totalPaidToday += getPaymentTotal(s);
+        const s = currentData.shops[shop];
+        if (s) {
+            totalPaidToday = getPaymentTotal(s);
             if (hasShopEntryActivity(s)) hasActivity = true;
-        });
+        }
 
         const card = document.getElementById(`card-shop-${idx}`);
         const statusDiv = document.getElementById(`status-shop-${idx}`);
@@ -1400,7 +1390,7 @@
         
         // 1. Get ALL unique shops that have activity today or past dues
         const allShopsSet = new Set(Object.keys(pastDuesCache));
-        const cats = ['PACKET', 'LOOSE'];
+        const cats = [currentCategory];
         cats.forEach(cat => {
             if(dayData[cat] && dayData[cat].activeShops) {
                 dayData[cat].activeShops.forEach(s => allShopsSet.add(s));
@@ -1571,56 +1561,54 @@
              const activeHubs = Array.from(new Set(driverTrips.map(t => t.hub)));
              
              let dSold = 0, aSold = 0;
-             let tripCount = driverTrips.length;
+             let tripCount = 0;
 
-             // 2. Aggregate stats for shops specifically served by THIS driver (Across all categories)
-             let shopDetailsHTML = "";
-             const shopActivity = {}; // { shopName: { dosa:0, appam:0, cash:0 } }
+             // 2. Aggregate stats for shops specifically served by THIS driver (For current category only)
+              let shopDetailsHTML = "";
+              const shopActivity = {}; // { shopName: { dosa:0, appam:0, cash:0 } }
 
-             const dayData = globalDB[selectedDate] || {};
+              const dayData = globalDB[selectedDate] || {};
 
-             Object.keys(dayData).forEach(cat => {
-                const catObj = dayData[cat];
-                if (!catObj || !catObj.shops) return;
-                const catShops = catObj.shops;
-                Object.keys(catShops).forEach(shop => {
-                    const sd = catShops[shop];
-                    if(!sd || sd.driver !== driver) return;
-                    
-                    const hasShopActivity = hasShopEntryActivity(sd);
-                    if(!hasShopActivity) return;
+              [currentCategory].forEach(cat => {
+                 const catObj = dayData[cat];
+                 if (!catObj || !catObj.shops) return;
+                 const catShops = catObj.shops;
+                 Object.keys(catShops).forEach(shop => {
+                     const sd = catShops[shop];
+                     if(!sd || sd.driver !== driver) return;
+                     
+                     const hasShopActivity = hasShopEntryActivity(sd);
+                     if(!hasShopActivity) return;
 
-                    if(!shopActivity[shop]) shopActivity[shop] = { dosa:0, appam:0, cash:0 };
-                    shopActivity[shop].dosa += (Number(sd.dosa?.sale)||0) + (Number(sd.dosa?.cr)||0);
-                    shopActivity[shop].appam += (Number(sd.appam?.sale)||0) + (Number(sd.appam?.cr)||0);
-                    shopActivity[shop].cash += getPaymentTotal(sd);
-                });
-             });
+                     if(!shopActivity[shop]) shopActivity[shop] = { dosa:0, appam:0, cash:0 };
+                     shopActivity[shop].dosa += (Number(sd.dosa?.sale)||0) + (Number(sd.dosa?.cr)||0);
+                     shopActivity[shop].appam += (Number(sd.appam?.sale)||0) + (Number(sd.appam?.cr)||0);
+                     shopActivity[shop].cash += getPaymentTotal(sd);
+                 });
+              });
 
-             Object.keys(shopActivity).forEach(shop => {
-                const act = shopActivity[shop];
-                shopDetailsHTML += `
-                <div style="background:white; padding:12px; border-radius:10px; border:1px solid #e2e8f0; margin-bottom:10px; box-shadow:0 1px 2px rgba(0,0,0,0.02)">
-                    <div style="font-weight:800; color:var(--primary); font-size:13px; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:baseline">
-                        <span>${shop}</span>
-                        <div style="text-align:right">
-                            <span style="font-size:9px; color:#64748b; font-weight:700; text-transform:uppercase; margin-right:4px">Cash:</span>
-                            <span style="color:#10b981">₹${act.cash}</span>
-                        </div>
-                    </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px">
-                        <div><span style="color:#64748b">Total Sale:</span> <b style="color:#0f172a">${act.dosa}D, ${act.appam}A</b></div>
-                    </div>
-                </div>`;
-             });
+              Object.keys(shopActivity).forEach(shop => {
+                 const act = shopActivity[shop];
+                 shopDetailsHTML += `
+                 <div style="background:white; padding:12px; border-radius:10px; border:1px solid #e2e8f0; margin-bottom:10px; box-shadow:0 1px 2px rgba(0,0,0,0.02)">
+                     <div style="font-weight:800; color:var(--primary); font-size:13px; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:baseline">
+                         <span>${shop}</span>
+                         <div style="text-align:right">
+                             <span style="font-size:9px; color:#64748b; font-weight:700; text-transform:uppercase; margin-right:4px">Cash:</span>
+                             <span style="color:#10b981">₹${act.cash}</span>
+                         </div>
+                     </div>
+                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px">
+                         <div><span style="color:#64748b">Total Sale:</span> <b style="color:#0f172a">${act.dosa}D, ${act.appam}A</b></div>
+                     </div>
+                 </div>`;
+              });
 
-             Object.keys(dayData).forEach(cat => {
-                const trips = (dayData[cat].trips || []).filter(t => t.driver === driver);
-                trips.forEach(t => {
-                    dSold += Number(t.dosa)||0; aSold += Number(t.appam)||0;
-                });
-             });
-             tripCount = (Object.keys(dayData).reduce((total, cat) => total + (dayData[cat].trips || []).filter(t => t.driver === driver).length, 0));
+              const trips = (dayData[currentCategory]?.trips || []).filter(t => t.driver === driver);
+              trips.forEach(t => {
+                  dSold += Number(t.dosa)||0; aSold += Number(t.appam)||0;
+              });
+              tripCount = trips.length;
 
              const hasData = tripCount > 0;
              const safeDriverName = driver.replace(/\s+/g, '');
@@ -1738,16 +1726,11 @@
             const pD = getPrice(shop, 'dosa');
             const pA = getPrice(shop, 'appam');
             let totalValToday = 0;
-            const dayData = globalDB[selectedDate] || {};
-            Object.keys(dayData).forEach(cat => {
-                const catObj = dayData[cat];
-                if (!catObj || !catObj.shops) return;
-                const s = catObj.shops[shop];
-                if(s) {
-                    totalValToday += (Number(s.dosa?.sale)||0) * pD + 
-                                     (Number(s.appam?.sale)||0) * pA;
-                }
-            });
+            const s = currentData.shops[shop];
+            if(s) {
+                totalValToday += (Number(s.dosa?.sale)||0) * pD + 
+                                 (Number(s.appam?.sale)||0) * pA;
+            }
             
             if(shownCount >= 50) return;
             shownCount++;
@@ -1988,8 +1971,7 @@
     const allShopsSet = new Set();
     
     // Determine which categories to process
-    // PACKET tab acts as the COMBINED / DAILY SUMMARY tab
-    const catsToProcess = (currentCategory === 'PACKET') ? Object.keys(dayData) : [currentCategory];
+    const catsToProcess = [currentCategory];
 
     // Get Cash in Hand from the CURRENT category only (to keep reconciliation separate per tab)
     const activeTally = currentData.tally || {};
@@ -2000,16 +1982,11 @@
         if(!catData) return;
             
             // 2. Aggregate LOADS (Trips)
-            // If in Packet (Combined) view, aggregate trips from all processed categories
-            // Otherwise, only aggregate for the specific category being processed
-            const processTrips = (currentCategory === 'PACKET') || (cat === currentCategory);
-            if (processTrips) {
-                const trips = (catData.trips || []).filter(t => !filterDriver || t.driver === filterDriver);
-                trips.forEach(t => {
-                    stats.dosa.load += Number(t.dosa) || 0;
-                    stats.appam.load += Number(t.appam) || 0;
-                });
-            }
+            const trips = (catData.trips || []).filter(t => !filterDriver || t.driver === filterDriver);
+            trips.forEach(t => {
+                stats.dosa.load += Number(t.dosa) || 0;
+                stats.appam.load += Number(t.appam) || 0;
+            });
 
             // 3. Expenses & Extra Income
         const tally = catData.tally || { expenses: [], extraIncome: [], cashInHandMap: {} };
@@ -2082,24 +2059,20 @@
             let aCrTotal = 0;
             let currentShopDriver = null;
             
-            Object.keys(dayData).forEach(cat => {
-                // If in category-specific mode (Loose), only look at Loose data for this shop
-                if(currentCategory !== 'PACKET' && cat !== currentCategory) return;
-                const catObj = dayData[cat];
-                if (!catObj || !catObj.shops) return;
+            const catObj = dayData[currentCategory];
+            if (catObj && catObj.shops) {
                 const s = catObj.shops[shop];
-                if (!s) return;
-                const pD = getPrice(shop, 'dosa');
-                const pA = getPrice(shop, 'appam');
-                todaySaleVal += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * pD + 
-                               ((Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0)) * pA;
-                shopCashRec += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0) + (Number(s.anandReceived) || 0);
-                if (cat === currentCategory) {
+                if (s) {
+                    const pD = getPrice(shop, 'dosa');
+                    const pA = getPrice(shop, 'appam');
+                    todaySaleVal += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * pD + 
+                                   ((Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0)) * pA;
+                    shopCashRec += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0) + (Number(s.anandReceived) || 0);
                     dCrTotal += (Number(s.dosa?.cr)||0);
                     aCrTotal += (Number(s.appam?.cr)||0);
+                    if (s.driver) currentShopDriver = s.driver;
                 }
-                if (s.driver) currentShopDriver = s.driver;
-            });
+            }
             
             const ownerDriver = currentShopDriver || getLastDriver(shop, selectedDate);
             if (!filterDriver || ownerDriver === filterDriver) {
@@ -2243,59 +2216,18 @@
                 <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin:24px 0 16px 0; text-transform:uppercase; letter-spacing:1px; text-align:center">Cash Reconciliation</h3>
 
                 <div style="background:#f8fafc; border-radius:12px; padding:16px; border:1px solid #e2e8f0; margin-bottom:20px">
-                    ${currentCategory === 'PACKET' ? `
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px">
-                        <span style="color:#64748b; font-size:11px; font-weight:600">Total Cash (PACKETS)</span>
-                        <span style="font-weight:700; color:#0f172a">₹${stats.cashPacket}</span>
-                    </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:12px">
-                        <span style="color:#64748b; font-size:11px; font-weight:600">Total Cash (LOOSE)</span>
-                        <span style="font-weight:700; color:#0f172a">₹${stats.cashLoose}</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:12px; padding-top:8px; border-top:1px solid #e2e8f0">
                         <span style="color:#334155; font-weight:700">Total Cash Collected</span>
                         <span style="font-weight:800; color:#0f172a">₹${stats.totalCashCollected}</span>
                     </div>
-
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; padding-top:12px; border-top:2px dashed #cbd5e1">
-                        <span style="color:#64748b; font-size:11px; font-weight:600">Total Gpay (PACKETS)</span>
-                        <span style="font-weight:700; color:#4f46e5">₹${stats.gpayPacket}</span>
-                    </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:12px">
-                        <span style="color:#64748b; font-size:11px; font-weight:600">Total Gpay (LOOSE)</span>
-                        <span style="font-weight:700; color:#4f46e5">₹${stats.gpayLoose}</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:8px">
                         <span style="color:#4f46e5; font-weight:700">Total Gpay Collected</span>
                         <span style="font-weight:800; color:#4f46e5">₹${stats.totalGpayCollected}</span>
                     </div>
-
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; padding-top:12px; border-top:2px dashed #fda4af">
-                        <span style="color:#64748b; font-size:11px; font-weight:600">Total ANAND (PACKETS)</span>
-                        <span style="font-weight:700; color:#e11d48">₹${stats.anandPacket}</span>
-                    </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:12px">
-                        <span style="color:#64748b; font-size:11px; font-weight:600">Total ANAND (LOOSE)</span>
-                        <span style="font-weight:700; color:#e11d48">₹${stats.anandLoose}</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:8px">
                         <span style="color:#e11d48; font-weight:700">Total ANAND Collected</span>
                         <span style="font-weight:800; color:#e11d48">₹${stats.totalAnandCollected}</span>
                     </div>
-                    ` : `
-                    <div style="display:flex; justify-content:space-between; margin-bottom:12px">
-                        <span style="color:#64748b; font-size:11px; font-weight:600">Total Cash (LOOSE)</span>
-                        <span style="font-weight:700; color:#0f172a">₹${stats.cashLoose}</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:12px">
-                        <span style="color:#64748b; font-size:11px; font-weight:600">Total Gpay (LOOSE)</span>
-                        <span style="font-weight:700; color:#4f46e5">₹${stats.gpayLoose}</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:12px">
-                        <span style="color:#64748b; font-size:11px; font-weight:600">Total ANAND (LOOSE)</span>
-                        <span style="font-weight:700; color:#e11d48">₹${stats.anandLoose}</span>
-                    </div>
-                    `}
                     ${stats.totalExtraIncome > 0 ? `
                     <div style="display:flex; justify-content:space-between; margin-bottom:8px">
                         <span style="color:#64748b; font-weight:600">Extra Income</span>

@@ -81,9 +81,96 @@
     
     .client-list { padding: 12px; max-height: 200px; overflow-y: auto; }
     .client-row { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+
+    /* --- RESPONSIVE STYLE --- */
+    .hamburger {
+        display: none;
+        background: none;
+        border: none;
+        padding: 8px;
+        cursor: pointer;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .hamburger div {
+        width: 22px;
+        height: 2px;
+        background: var(--text-dark);
+        transition: 0.3s;
+    }
+    .sidebar-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 99;
+        backdrop-filter: blur(2px);
+    }
+    
+    @media (max-width: 768px) {
+        .hamburger {
+            display: flex;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 100;
+            transform: translateX(-100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 4px 0 10px rgba(0,0,0,0.1);
+        }
+        .sidebar.open {
+            transform: translateX(0);
+        }
+        .sidebar-overlay.show {
+            display: block;
+        }
+        .topbar {
+            padding: 0 16px;
+        }
+        .content {
+            padding: 16px;
+        }
+        .kpi-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+        .driver-grid {
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+        .filter-bar {
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .filter-bar select, .filter-bar input {
+            flex: 1;
+            min-width: 120px;
+        }
+        .filter-bar .btn {
+            flex: 1;
+            text-align: center;
+        }
+        .modal {
+            width: 90%;
+            max-width: 400px;
+        }
+    }
+    @media (max-width: 480px) {
+        .kpi-grid {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 </head>
 <body>
+
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
 <div class="sidebar">
     <div class="brand">IyersFood<span>Admin</span></div>
@@ -100,6 +187,11 @@
 
 <div class="main">
     <div class="topbar">
+        <button class="hamburger" onclick="toggleSidebar()">
+            <div></div>
+            <div></div>
+            <div></div>
+        </button>
         <div class="page-title" id="pageTitle">Dashboard</div>
         <div class="user">Owner<div class="avatar">O</div></div>
     </div>
@@ -228,7 +320,23 @@ window.nav = function(id, el) {
     if(el) el.classList.add('active');
     const title = document.getElementById('pageTitle');
     if(title && el) title.innerText = el.innerText;
+    
+    // Close sidebar on mobile navigation
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar.classList.contains('open')) {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('show');
+    }
+    
     refreshUI();
+};
+
+window.toggleSidebar = function() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('show');
 };
 
 /* --- STATE --- */
