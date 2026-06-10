@@ -826,6 +826,19 @@
         if (!globalDB[date]) globalDB[date] = getEmptyRouteDay();
         globalDB[date] = normalizeRouteDay(globalDB[date], currentCategory);
 
+        // Sync tally between categories if one is populated and the other is empty
+        const packetTally = globalDB[date]['PACKET']?.tally || {};
+        const looseTally = globalDB[date]['LOOSE']?.tally || {};
+        
+        const isPacketTallyEmpty = !packetTally.expenses?.length && !packetTally.extraIncome?.length && Object.keys(packetTally.cashInHandMap || {}).length === 0;
+        const isLooseTallyEmpty = !looseTally.expenses?.length && !looseTally.extraIncome?.length && Object.keys(looseTally.cashInHandMap || {}).length === 0;
+        
+        if (!isPacketTallyEmpty && isLooseTallyEmpty) {
+            globalDB[date]['LOOSE'].tally = JSON.parse(JSON.stringify(packetTally));
+        } else if (isPacketTallyEmpty && !isLooseTallyEmpty) {
+            globalDB[date]['PACKET'].tally = JSON.parse(JSON.stringify(looseTally));
+        }
+
         ['PACKET', 'LOOSE'].forEach(cat => {
             const catData = globalDB[date][cat];
             if (!catData.shops) catData.shops = {};
@@ -847,7 +860,7 @@
     function getShopDayValue(shop, dayData) {
         let sold = 0;
         let paid = 0;
-        [currentCategory].forEach(cat => {
+        ['PACKET', 'LOOSE'].forEach(cat => {
             const s = dayData?.[cat]?.shops?.[shop];
             if (!s) return;
             const pD = getPrice(shop, 'dosa');
@@ -888,7 +901,7 @@
             .map(date => {
                 const dayData = globalDB[date] || {};
                 let dosa = 0, appam = 0, value = 0, cash = 0;
-                [currentCategory].forEach(cat => {
+                ['PACKET', 'LOOSE'].forEach(cat => {
                     const s = dayData?.[cat]?.shops?.[shop];
                     if (!s) return;
                     const dQty = (Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0);
@@ -911,7 +924,7 @@
             .reduce((found, date) => {
                 if (found) return found;
                 const dayData = globalDB[date] || {};
-                for (const cat of [currentCategory]) {
+                for (const cat of ['PACKET', 'LOOSE']) {
                     const driver = dayData?.[cat]?.shops?.[shop]?.driver;
                     if (driver) return driver;
                 }
@@ -1221,7 +1234,7 @@
     
     function updateCashReceived(shop, val, idx) {
         if(!selectedDriver) {
-            alert("⚠️ PLEASE SELECT A DRIVER FIRST!\n\nEvery driver delivers to different shops. Please select a driver from the chips above before entering sales data.");
+            alert("⚠️ PLEASE SELECT A ROUTE FIRST!\n\nPlease select a route from the dropdown above before entering sales data.");
             renderShops();
             return;
         }
@@ -1239,7 +1252,7 @@
 
     function updateGpayReceived(shop, val, idx) {
         if(!selectedDriver) {
-            alert("⚠️ PLEASE SELECT A DRIVER FIRST!\n\nEvery driver delivers to different shops. Please select a driver from the chips above before entering sales data.");
+            alert("⚠️ PLEASE SELECT A ROUTE FIRST!\n\nPlease select a route from the dropdown above before entering sales data.");
             renderShops();
             return;
         }
@@ -1257,7 +1270,7 @@
 
     function updateAnandReceived(shop, val, idx) {
         if(!selectedDriver) {
-            alert("⚠️ PLEASE SELECT A DRIVER FIRST!\n\nEvery driver delivers to different shops. Please select a driver from the chips above before entering sales data.");
+            alert("⚠️ PLEASE SELECT A ROUTE FIRST!\n\nPlease select a route from the dropdown above before entering sales data.");
             renderShops();
             return;
         }
@@ -1274,20 +1287,21 @@
     }
     
     function updateShopBalance(shop, idx) {
-        const prevDues = getPendingBalance(shop, selectedDate);
+        const prevDues = pastDuesCache[shop] !== undefined ? pastDuesCache[shop] : getPendingBalance(shop, selectedDate);
         let todayBillValue = 0;
         let paid = 0;
         const pD = getPrice(shop, 'dosa');
         const pA = getPrice(shop, 'appam');
 
-        const addShop = (s) => {
-            if (!s) return;
-            todayBillValue += ((Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0)) * pD;
-            todayBillValue += ((Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0)) * pA;
-            paid += getPaymentTotal(s);
-        };
-
-        addShop(currentData.shops[shop]);
+        const dayData = globalDB[selectedDate] || {};
+        ['PACKET', 'LOOSE'].forEach(cat => {
+            const s = dayData?.[cat]?.shops?.[shop];
+            if (s) {
+                todayBillValue += ((Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0)) * pD;
+                todayBillValue += ((Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0)) * pA;
+                paid += getPaymentTotal(s);
+            }
+        });
 
         const balance = prevDues + todayBillValue - paid;
         const balEl = document.getElementById(`balance-${idx}`);
@@ -1390,7 +1404,7 @@
         
         // 1. Get ALL unique shops that have activity today or past dues
         const allShopsSet = new Set(Object.keys(pastDuesCache));
-        const cats = [currentCategory];
+        const cats = ['PACKET', 'LOOSE'];
         cats.forEach(cat => {
             if(dayData[cat] && dayData[cat].activeShops) {
                 dayData[cat].activeShops.forEach(s => allShopsSet.add(s));
@@ -1531,47 +1545,50 @@
      }
 
      function renderDeliveryMemberLogs() {
-         const container = document.getElementById('deliveryMemberLogs');
-         if(!container) return;
+          const container = document.getElementById('deliveryMemberLogs');
+          if(!container) return;
 
-         // 1. Preserve Expanded State
-         const openStates = {};
-         const gds = document.getElementById('globalDriverSelect');
-         const DRIVERS = gds ? Array.from(gds.options).map(o => o.value).filter(v => v !== "") : ["Udhayamperoor", "Kakkanad", "Kadavanthra", "Nettor"];
-         DRIVERS.forEach(d => {
-            const safeName = d.replace(/\s+/g, '');
-            const body = document.getElementById(`member-log-${safeName}`);
-            if (body && body.parentElement.classList.contains('expanded')) {
-                openStates[d] = true;
-            }
-         });
+          // 1. Preserve Expanded State
+          const openStates = {};
+          const gds = document.getElementById('globalDriverSelect');
+          const DRIVERS = gds ? Array.from(gds.options).map(o => o.value).filter(v => v !== "") : ["Udhayamperoor", "Kakkanad", "Kadavanthra", "Nettor"];
+          DRIVERS.forEach(d => {
+             const safeName = d.replace(/\s+/g, '');
+             const body = document.getElementById(`member-log-${safeName}`);
+             if (body && body.parentElement.classList.contains('expanded')) {
+                 openStates[d] = true;
+             }
+          });
 
-         container.innerHTML = "";
-         
-         // Use currentData directly to ensure we show what is being edited
-         const catData = currentData; 
-         if(!catData || !catData.shops) return;
+          container.innerHTML = "";
+          
+          // Use currentData directly to ensure we show what is being edited
+          const catData = currentData; 
+          if(!catData || !catData.shops) return;
 
-         // FILTER: If a global driver is selected, only show them. Otherwise show all.
-         const driversToShow = selectedDriver ? [selectedDriver] : DRIVERS;
+          // FILTER: If a global driver is selected, only show them. Otherwise show all.
+          const driversToShow = selectedDriver ? [selectedDriver] : DRIVERS;
 
-         driversToShow.forEach((driver) => {
-             // 1. Find hubs this driver delivered to TODAY
-             const driverTrips = (catData.trips || []).filter(t => t.driver === driver);
-             const activeHubs = Array.from(new Set(driverTrips.map(t => t.hub)));
-             
-             let dSold = 0, aSold = 0;
-             let tripCount = 0;
-
-             // 2. Aggregate stats for shops specifically served by THIS driver (For current category only)
+          driversToShow.forEach((driver) => {
+              let dSold = 0, aSold = 0, tripCount = 0;
+              // 1. Find hubs this driver delivered to TODAY for currentCategory
+              const dayData = globalDB[selectedDate] || {};
+              const driverTrips = [];
+              if (dayData[currentCategory] && dayData[currentCategory].trips) {
+                  dayData[currentCategory].trips.forEach(t => {
+                      if (t.driver === driver) driverTrips.push(t);
+                  });
+              }
+              const activeHubs = Array.from(new Set(driverTrips.map(t => t.hub)));
+              // 2. Aggregate stats for shops specifically served by THIS driver for currentCategory
               let shopDetailsHTML = "";
               const shopActivity = {}; // { shopName: { dosa:0, appam:0, cash:0 } }
 
-              const dayData = globalDB[selectedDate] || {};
+              // Gather active shops in entry order for currentCategory
+              const activeShopsCombined = [...(dayData[currentCategory]?.activeShops || [])];
 
-              [currentCategory].forEach(cat => {
-                 const catObj = dayData[cat];
-                 if (!catObj || !catObj.shops) return;
+              const catObj = dayData[currentCategory];
+              if (catObj && catObj.shops) {
                  const catShops = catObj.shops;
                  Object.keys(catShops).forEach(shop => {
                      const sd = catShops[shop];
@@ -1580,14 +1597,30 @@
                      const hasShopActivity = hasShopEntryActivity(sd);
                      if(!hasShopActivity) return;
 
-                     if(!shopActivity[shop]) shopActivity[shop] = { dosa:0, appam:0, cash:0 };
+                     if(!shopActivity[shop]) {
+                         shopActivity[shop] = { dosa:0, appam:0, cash:0, dosaDmg:0, appamDmg:0, dosaFree:0, appamFree:0 };
+                     }
                      shopActivity[shop].dosa += (Number(sd.dosa?.sale)||0) + (Number(sd.dosa?.cr)||0);
                      shopActivity[shop].appam += (Number(sd.appam?.sale)||0) + (Number(sd.appam?.cr)||0);
                      shopActivity[shop].cash += getPaymentTotal(sd);
+                     shopActivity[shop].dosaDmg += (Number(sd.dosa?.dmg)||0);
+                     shopActivity[shop].appamDmg += (Number(sd.appam?.dmg)||0);
+                     shopActivity[shop].dosaFree += (Number(sd.dosa?.free)||0);
+                     shopActivity[shop].appamFree += (Number(sd.appam?.free)||0);
                  });
+              }
+
+              // Filter activeShopsCombined to only include those in shopActivity (which match driver + activity)
+              const orderedShops = activeShopsCombined.filter(shop => shopActivity[shop] !== undefined);
+
+              // Fallback: Append any remaining shops from shopActivity that were not in activeShopsCombined
+              Object.keys(shopActivity).forEach(shop => {
+                  if (!orderedShops.includes(shop)) {
+                      orderedShops.push(shop);
+                  }
               });
 
-              Object.keys(shopActivity).forEach(shop => {
+              orderedShops.forEach(shop => {
                  const act = shopActivity[shop];
                  shopDetailsHTML += `
                  <div style="background:white; padding:12px; border-radius:10px; border:1px solid #e2e8f0; margin-bottom:10px; box-shadow:0 1px 2px rgba(0,0,0,0.02)">
@@ -1598,8 +1631,10 @@
                              <span style="color:#10b981">₹${act.cash}</span>
                          </div>
                      </div>
-                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px">
-                         <div><span style="color:#64748b">Total Sale:</span> <b style="color:#0f172a">${act.dosa}D, ${act.appam}A</b></div>
+                     <div style="font-size:11px">
+                         <span style="color:#64748b">Total Sale:</span> <b style="color:#0f172a">${act.dosa}D, ${act.appam}A</b> | 
+                         <span style="color:#ef4444; font-weight:700">DA:</span> <b style="color:#ef4444">${act.dosaDmg}D, ${act.appamDmg}A</b> | 
+                         <span style="color:#3b82f6; font-weight:700">FR:</span> <b style="color:#3b82f6">${act.dosaFree}D, ${act.appamFree}A</b>
                      </div>
                  </div>`;
               });
@@ -1608,49 +1643,49 @@
               trips.forEach(t => {
                   dSold += Number(t.dosa)||0; aSold += Number(t.appam)||0;
               });
-              tripCount = trips.length;
+              tripCount = driverTrips.length;
 
-             const hasData = tripCount > 0;
-             const safeDriverName = driver.replace(/\s+/g, '');
-             const isOpen = openStates[driver]; // Restore State
-             
-             container.innerHTML += `
-             <div class="card ${isOpen ? 'expanded' : ''}" style="margin-bottom:12px">
-                 <div class="shop-header" onclick="toggleMemberLog('${safeDriverName}')" style="background:#f8fafc">
-                     <div class="shop-name" style="color:${hasData ? 'var(--primary)' : 'var(--text-muted)'}">
-                         ${driver}
-                     </div>
-                     <div class="shop-status">
-                         <span style="font-size:11px">${tripCount} load(s)</span>
-                         <div class="status-dot" style="background:${hasData ? 'var(--success)' : '#cbd5e1'}"></div>
-                     </div>
-                 </div>
-                 <div class="shop-body" id="member-log-${safeDriverName}">
-                     ${hasData ? `
-                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px">
-                             <div style="background:white; padding:10px; border-radius:12px; border:1px solid #e2e8f0; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.02)">
-                                 <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px">Dosa Loaded</div>
-                                 <div style="font-size:20px; font-weight:800; color:var(--dosa-color)">${dSold}</div>
-                             </div>
-                             <div style="background:white; padding:10px; border-radius:12px; border:1px solid #e2e8f0; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.02)">
-                                 <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px">Appam Loaded</div>
-                                 <div style="font-size:20px; font-weight:800; color:var(--appam-color)">${aSold}</div>
-                             </div>
+              const hasData = tripCount > 0;
+              const safeDriverName = driver.replace(/\s+/g, '');
+              const isOpen = openStates[driver]; // Restore State
+              
+              container.innerHTML += `
+              <div class="card ${isOpen ? 'expanded' : ''}" style="margin-bottom:12px">
+                  <div class="shop-header" onclick="toggleMemberLog('${safeDriverName}')" style="background:#f8fafc">
+                      <div class="shop-name" style="color:${hasData ? 'var(--primary)' : 'var(--text-muted)'}">
+                          ${driver}
+                      </div>
+                      <div class="shop-status">
+                          <span style="font-size:11px">${tripCount} load(s)</span>
+                          <div class="status-dot" style="background:${hasData ? 'var(--success)' : '#cbd5e1'}"></div>
+                      </div>
+                  </div>
+                  <div class="shop-body" id="member-log-${safeDriverName}">
+                      ${hasData ? `
+                          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px">
+                              <div style="background:white; padding:10px; border-radius:12px; border:1px solid #e2e8f0; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.02)">
+                                  <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px">Dosa Loaded</div>
+                                  <div style="font-size:20px; font-weight:800; color:var(--dosa-color)">${dSold}</div>
+                              </div>
+                              <div style="background:white; padding:10px; border-radius:12px; border:1px solid #e2e8f0; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.02)">
+                                  <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px">Appam Loaded</div>
+                                  <div style="font-size:20px; font-weight:800; color:var(--appam-color)">${aSold}</div>
+                              </div>
+                          </div>
+                          
+                          <div style="margin-bottom:12px">
+                              <div style="font-size:11px; font-weight:700; color:#64748b; margin-bottom:8px; text-transform:uppercase">Delivery History</div>
+                              ${shopDetailsHTML || `<div style="text-align:center; padding:12px; color:#94a3b8; font-size:12px; background:white; border-radius:8px; border:1px dashed #cbd5e1">No shop activity recorded yet</div>`}
+                          </div>
+                          
+                          <div style="font-size:11px; color:#64748b">Hubs Assigned: <b>${activeHubs.join(", ") || 'General'}</b></div>
+                      ` : `
+                          <div style="padding:40px; text-align:center; color:#cbd5e1; font-size:12px; border:1px dashed #e2e8f0; border-radius:12px">
+                             No loads recorded for this route today
                          </div>
-                         
-                         <div style="margin-bottom:12px">
-                             <div style="font-size:11px; font-weight:700; color:#64748b; margin-bottom:8px; text-transform:uppercase">Delivery History</div>
-                             ${shopDetailsHTML || `<div style="text-align:center; padding:12px; color:#94a3b8; font-size:12px; background:white; border-radius:8px; border:1px dashed #cbd5e1">No shop activity recorded yet</div>`}
-                         </div>
-
-                         <div style="font-size:11px; color:#64748b">Hubs Assigned: <b>${activeHubs.join(", ") || 'General'}</b></div>
-                     ` : `
-                         <div style="padding:40px; text-align:center; color:#cbd5e1; font-size:12px; border:1px dashed #e2e8f0; border-radius:12px">
-                            No loads recorded for this route today
-                        </div>
-                     `}
-                 </div>
-             </div>`;
+                      `}
+                  </div>
+              </div>`;
          });
      }
      
@@ -1699,11 +1734,46 @@
         
         let shownCount = 0;
         // Logic: Show shops that HAVE activity today OR shops that historically belong to this route (if no search)
-        const listToIterate = SHOP_LIST; 
+        const dayData = globalDB[selectedDate] || {};
+        const activeShopsCombined = [];
+        ['PACKET', 'LOOSE'].forEach(cat => {
+           const arr = dayData[cat]?.activeShops || [];
+           arr.forEach(shop => {
+               if (!activeShopsCombined.includes(shop)) {
+                   activeShopsCombined.push(shop);
+               }
+           });
+        });
+
+        const activeList = [];
+        const pendingList = [];
+
+        SHOP_LIST.forEach(shop => {
+            const data = (currentData && currentData.shops) ? currentData.shops[shop] : null;
+            const hasActivity = data ? hasShopEntryActivity(data) : false;
+            if (hasActivity) {
+                activeList.push(shop);
+            } else {
+                pendingList.push(shop);
+            }
+        });
+
+        activeList.sort((a, b) => {
+            const indexA = activeShopsCombined.indexOf(a);
+            const indexB = activeShopsCombined.indexOf(b);
+            if (indexA !== -1 && indexB !== -1) {
+                return indexA - indexB;
+            }
+            if (indexA !== -1) return -1;
+            if (indexB !== -1) return 1;
+            return a.localeCompare(b);
+        });
+
+        const listToIterate = [...activeList, ...pendingList];
         let htmlBuffer = "";
         
-        listToIterate.forEach((shop, i) => {
-            const idx = i;
+        listToIterate.forEach((shop) => {
+            const idx = SHOP_LIST.indexOf(shop);
             const data = currentData.shops[shop] || { dosa:{}, appam:{} };
             const hasActivity = hasShopEntryActivity(data);
             
@@ -1726,13 +1796,16 @@
             const pD = getPrice(shop, 'dosa');
             const pA = getPrice(shop, 'appam');
             let totalValToday = 0;
-            const s = currentData.shops[shop];
-            if(s) {
-                totalValToday += (Number(s.dosa?.sale)||0) * pD + 
-                                 (Number(s.appam?.sale)||0) * pA;
-            }
+            const dayData = globalDB[selectedDate] || {};
+            ['PACKET', 'LOOSE'].forEach(cat => {
+                const s = dayData?.[cat]?.shops?.[shop];
+                if(s) {
+                    totalValToday += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * getPrice(shop, 'dosa') + 
+                                     ((Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0)) * getPrice(shop, 'appam');
+                }
+            });
             
-            if(shownCount >= 50) return;
+            if(shownCount >= 150) return;
             shownCount++;
             
             // Determine initial tab state
@@ -1742,7 +1815,7 @@
             <div class="card ${hasActivity ? 'completed' : ''}" id="card-shop-${idx}">
                 <div class="shop-header" onclick="toggleShop(${idx})">
                     <div class="shop-name">${shownCount}. ${shop}</div>
-                    <div class="shop-status" id="status-shop-${idx}">${hasActivity ? `<span>₹${Number(data.cashReceived) || 0}</span>` : 'Pending'}<div class="status-dot"></div></div>
+                    <div class="shop-status" id="status-shop-${idx}">${hasActivity ? `<span>₹${getPaymentTotal(data)}</span>` : 'Pending'}<div class="status-dot"></div></div>
                 </div>
                 <div class="shop-body">
                     <div class="prod-tabs">
@@ -1834,9 +1907,18 @@
     }
 
     /* --- TALLY & RECONCILIATION LOGIC --- */
+    function syncTally() {
+        const otherCat = currentCategory === 'PACKET' ? 'LOOSE' : 'PACKET';
+        if (globalDB[selectedDate] && globalDB[selectedDate][otherCat]) {
+            globalDB[selectedDate][otherCat].tally = JSON.parse(JSON.stringify(currentData.tally));
+        }
+    }
+
     function addExpense() {
-        if(!currentData.tally) currentData.tally = { cashInHandMap: {}, expenses: [] };
+        if(!currentData.tally) currentData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] };
+        if(!currentData.tally.expenses) currentData.tally.expenses = [];
         currentData.tally.expenses.push({ id: generateId(), detail: '', amount: '', driver: selectedDriver });
+        syncTally();
         saveData();
         renderTally();
     }
@@ -1853,6 +1935,7 @@
                 localIdx++;
             }
         }
+        syncTally();
         saveData();
         // OPTIMIZATION: Only update totals to keep input focus intact
         updateTallyReconciliationUI();
@@ -1871,15 +1954,17 @@
                 localIdx++;
             }
         }
+        syncTally();
         saveData();
         renderTally();
     }
 
     /* --- EXTRA INCOME LOGIC --- */
     function addExtraIncome() {
-        if(!currentData.tally) currentData.tally = { cashInHandMap: {}, expenses: [], extraIncome: [] };
+        if(!currentData.tally) currentData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] };
         if(!currentData.tally.extraIncome) currentData.tally.extraIncome = [];
         currentData.tally.extraIncome.push({ id: generateId(), item: '', amount: '', driver: selectedDriver });
+        syncTally();
         saveData();
         renderTally();
     }
@@ -1896,6 +1981,7 @@
                 localIdx++;
             }
         }
+        syncTally();
         saveData();
         // OPTIMIZATION: Only update totals to keep input focus intact
         updateTallyReconciliationUI();
@@ -1914,17 +2000,22 @@
                 localIdx++;
             }
         }
+        syncTally();
         saveData();
         renderTally();
     }
+    
     function updateCashInHand(val) {
-        if(!currentData.tally) currentData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [] };
+        if(!currentData.tally) currentData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] };
+        if(!currentData.tally.cashInHandMap) currentData.tally.cashInHandMap = {};
         currentData.tally.cashInHandMap[selectedDriver || ''] = val;
+        syncTally();
         saveData();
         updateTallyReconciliationUI();
     }
 
     function updateDenom(denom, qty) {
+        if(!currentData.tally) currentData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] };
         if(!currentData.tally.denomsMap) currentData.tally.denomsMap = {};
         const driver = selectedDriver || '';
         if(!currentData.tally.denomsMap[driver]) {
@@ -1968,35 +2059,38 @@
         };
 
         const dayData = globalDB[selectedDate] || {};
-    const allShopsSet = new Set();
-    
-    // Determine which categories to process
-    const catsToProcess = [currentCategory];
+        const allShopsSet = new Set();
+        
+        // Determine which categories to process
+        // We always process both PACKET and LOOSE for daily financial reconciliation
+        const catsToProcess = ['PACKET', 'LOOSE'];
 
-    // Get Cash in Hand from the CURRENT category only (to keep reconciliation separate per tab)
-    const activeTally = currentData.tally || {};
-    stats.cashInHand = Number(activeTally.cashInHandMap ? activeTally.cashInHandMap[filterDriver || ''] : 0) || 0;
+        // Get Cash in Hand from the CURRENT category (synced with the other category)
+        const activeTally = currentData.tally || {};
+        stats.cashInHand = Number(activeTally.cashInHandMap ? activeTally.cashInHandMap[filterDriver || ''] : 0) || 0;
 
-    catsToProcess.forEach(cat => {
-        const catData = dayData[cat];
-        if(!catData) return;
-            
-            // 2. Aggregate LOADS (Trips)
+        catsToProcess.forEach(cat => {
+            const catData = dayData[cat];
+            if(!catData) return;
+                
+            // 2. Aggregate LOADS (Trips) - combined across both categories for full day stats
             const trips = (catData.trips || []).filter(t => !filterDriver || t.driver === filterDriver);
             trips.forEach(t => {
                 stats.dosa.load += Number(t.dosa) || 0;
                 stats.appam.load += Number(t.appam) || 0;
             });
 
-            // 3. Expenses & Extra Income
-        const tally = catData.tally || { expenses: [], extraIncome: [], cashInHandMap: {} };
-        const filteredExpenses = (tally.expenses || []).filter(e => !filterDriver || e.driver === filterDriver);
-        filteredExpenses.forEach(e => stats.totalExpenses += (Number(e.amount)||0));
+            // 3. Expenses & Extra Income - only for current category to avoid double counting
+            if (cat === currentCategory) {
+                const tally = catData.tally || { expenses: [], extraIncome: [], cashInHandMap: {} };
+                const filteredExpenses = (tally.expenses || []).filter(e => !filterDriver || e.driver === filterDriver);
+                filteredExpenses.forEach(e => stats.totalExpenses += (Number(e.amount)||0));
 
-        const filteredExtra = (tally.extraIncome || []).filter(ei => !filterDriver || ei.driver === filterDriver);
-        filteredExtra.forEach(ei => stats.totalExtraIncome += (Number(ei.amount)||0));
-        
-        // 4. Aggregate SHOP SALES
+                const filteredExtra = (tally.extraIncome || []).filter(ei => !filterDriver || ei.driver === filterDriver);
+                filteredExtra.forEach(ei => stats.totalExtraIncome += (Number(ei.amount)||0));
+            }
+            
+            // 4. Aggregate SHOP SALES - combined across both categories
             const shops = catData.shops || {};
             Object.keys(shops).forEach(shop => {
                 const s = shops[shop];
@@ -2015,20 +2109,18 @@
                 const pD = getPrice(shop, 'dosa');
                 const pA = getPrice(shop, 'appam');
 
-                // Product Stats
-                if (cat === currentCategory) {
-                    stats.dosa.sold += dSale;
-                    stats.dosa.credit += dCr; 
-                    stats.dosa.dmg += dDmg;
-                    stats.dosa.free += dFree;
+                // Product Stats (combined across all categories)
+                stats.dosa.sold += dSale;
+                stats.dosa.credit += dCr; 
+                stats.dosa.dmg += dDmg;
+                stats.dosa.free += dFree;
 
-                    stats.appam.sold += aSale;
-                    stats.appam.credit += aCr;
-                    stats.appam.dmg += aDmg;
-                    stats.appam.free += aFree;
-                }
+                stats.appam.sold += aSale;
+                stats.appam.credit += aCr;
+                stats.appam.dmg += aDmg;
+                stats.appam.free += aFree;
 
-                // Cash, Gpay & Anand Collected
+                // Cash, Gpay & Anand Collected (always combined across categories)
                 const cash = (Number(s.cashReceived) || 0);
                 const gpay = (Number(s.gpayReceived) || 0);
                 const anand = (Number(s.anandReceived) || 0);
@@ -2052,34 +2144,40 @@
 
         // Sum Outstanding for all shops ever visited
         allShopsSet.forEach(shop => {
-            const prevDues = getPendingBalance(shop, selectedDate);
+            const prevDues = pastDuesCache[shop] !== undefined ? pastDuesCache[shop] : getPendingBalance(shop, selectedDate);
             let todaySaleVal = 0;
             let shopCashRec = 0;
             let dCrTotal = 0;
             let aCrTotal = 0;
             let currentShopDriver = null;
             
-            const catObj = dayData[currentCategory];
-            if (catObj && catObj.shops) {
-                const s = catObj.shops[shop];
-                if (s) {
-                    const pD = getPrice(shop, 'dosa');
-                    const pA = getPrice(shop, 'appam');
-                    todaySaleVal += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * pD + 
-                                   ((Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0)) * pA;
-                    shopCashRec += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0) + (Number(s.anandReceived) || 0);
-                    dCrTotal += (Number(s.dosa?.cr)||0);
-                    aCrTotal += (Number(s.appam?.cr)||0);
-                    if (s.driver) currentShopDriver = s.driver;
+            // Loop through BOTH categories to get today's true sales and payments
+            catsToProcess.forEach(cat => {
+                const catObj = dayData[cat];
+                if (catObj && catObj.shops) {
+                    const s = catObj.shops[shop];
+                    if (s) {
+                        const pD = getPrice(shop, 'dosa');
+                        const pA = getPrice(shop, 'appam');
+                        todaySaleVal += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * pD + 
+                                       ((Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0)) * pA;
+                        shopCashRec += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0) + (Number(s.anandReceived) || 0);
+                        
+                        // We aggregate the credit given today across all categories for tally purposes
+                        dCrTotal += (Number(s.dosa?.cr)||0);
+                        aCrTotal += (Number(s.appam?.cr)||0);
+                        
+                        if (s.driver) currentShopDriver = s.driver;
+                    }
                 }
-            }
+            });
             
             const ownerDriver = currentShopDriver || getLastDriver(shop, selectedDate);
             if (!filterDriver || ownerDriver === filterDriver) {
                 stats.totalOutstanding += (prevDues + todaySaleVal - shopCashRec);
                 
                 const creditVal = (dCrTotal * getPrice(shop, 'dosa')) + (aCrTotal * getPrice(shop, 'appam'));
-                if(creditVal > 0) stats.credits.push({ name: shop, value: creditVal });
+                if(creditVal > 0.1) stats.credits.push({ name: shop, value: creditVal });
             }
         });
 
@@ -2216,24 +2314,54 @@
                 <h3 style="font-size:16px; font-weight:900; color:#0f172a; margin:24px 0 16px 0; text-transform:uppercase; letter-spacing:1px; text-align:center">Cash Reconciliation</h3>
 
                 <div style="background:#f8fafc; border-radius:12px; padding:16px; border:1px solid #e2e8f0; margin-bottom:20px">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:12px">
+                    <!-- Cash Breakdown -->
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px">
+                        <span style="color:#64748b; font-size:11px">Total Cash (PACKETS)</span>
+                        <span style="font-weight:700; color:#475569">₹${stats.cashPacket}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px">
+                        <span style="color:#64748b; font-size:11px">Total Cash (LOOSE)</span>
+                        <span style="font-weight:700; color:#475569">₹${stats.cashLoose}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px; padding-top:4px; border-top:1px solid #e2e8f0">
                         <span style="color:#334155; font-weight:700">Total Cash Collected</span>
                         <span style="font-weight:800; color:#0f172a">₹${stats.totalCashCollected}</span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:12px">
+
+                    <!-- Gpay Breakdown -->
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px; padding-top:8px; border-top:2px dashed #e2e8f0">
+                        <span style="color:#64748b; font-size:11px">Total Gpay (PACKETS)</span>
+                        <span style="font-weight:700; color:#475569">₹${stats.gpayPacket}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px">
+                        <span style="color:#64748b; font-size:11px">Total Gpay (LOOSE)</span>
+                        <span style="font-weight:700; color:#475569">₹${stats.gpayLoose}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px; padding-top:4px; border-top:1px solid #e2e8f0">
                         <span style="color:#4f46e5; font-weight:700">Total Gpay Collected</span>
                         <span style="font-weight:800; color:#4f46e5">₹${stats.totalGpayCollected}</span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:12px">
+
+                    <!-- Anand Breakdown -->
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px; padding-top:8px; border-top:2px dashed #e2e8f0">
+                        <span style="color:#64748b; font-size:11px">Total Anand (PACKETS)</span>
+                        <span style="font-weight:700; color:#475569">₹${stats.anandPacket}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px">
+                        <span style="color:#64748b; font-size:11px">Total Anand (LOOSE)</span>
+                        <span style="font-weight:700; color:#475569">₹${stats.anandLoose}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px; padding-top:4px; border-top:1px solid #e2e8f0">
                         <span style="color:#e11d48; font-weight:700">Total ANAND Collected</span>
                         <span style="font-weight:800; color:#e11d48">₹${stats.totalAnandCollected}</span>
                     </div>
+
                     ${stats.totalExtraIncome > 0 ? `
-                    <div style="display:flex; justify-content:space-between; margin-bottom:8px">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px; padding-top:8px; border-top:2px dashed #cbd5e1">
                         <span style="color:#64748b; font-weight:600">Extra Income</span>
                         <span style="font-weight:800; color:#10b981">+ ₹${stats.totalExtraIncome}</span>
                     </div>` : ''}
-                    <div style="display:flex; justify-content:space-between; margin-bottom:12px; padding-bottom:12px; border-bottom:1px dashed #cbd5e1">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px; padding-top:8px; padding-bottom:12px; border-bottom:1px dashed #cbd5e1; border-top: ${stats.totalExtraIncome > 0 ? 'none' : '2px dashed #cbd5e1'}">
                         <span style="color:#64748b; font-weight:600">Expenses</span>
                         <span style="font-weight:800; color:#ef4444">- ₹${stats.totalExpenses}</span>
                     </div>
