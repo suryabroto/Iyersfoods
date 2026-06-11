@@ -660,7 +660,7 @@
     }
 
     /* ---- FIRESTORE SAVE ---- */
-    async function saveData(updates = null) {
+    async function saveData(obj = null) {
         lastSaveTime = Date.now();
         // 1. Update in-memory + localStorage cache immediately (fast / offline)
         if (!globalDB[selectedDate]) globalDB[selectedDate] = {};
@@ -670,30 +670,11 @@
         // 2. Write the current day to its own Firestore document
         try {
             const routeRef = db.collection("routeDays").doc(selectedDate);
-            if (updates && Array.isArray(updates)) {
-                const args = [];
-                updates.forEach(u => {
-                    args.push(u.path, u.value);
-                });
-                await routeRef.update.apply(routeRef, args);
-            } else if (updates) {
-                await routeRef.update(updates);
-            } else {
-                const sanitizedDay = JSON.parse(JSON.stringify(normalizeRouteDay(globalDB[selectedDate], currentCategory)));
-                await routeRef.set(sanitizedDay, { merge: true });
-            }
+            const dataToSave = obj || normalizeRouteDay(globalDB[selectedDate], currentCategory);
+            const sanitizedDay = JSON.parse(JSON.stringify(dataToSave));
+            await routeRef.set(sanitizedDay, { merge: true });
         } catch (err) {
             console.error("Firestore save error:", err);
-            // Fallback to set if document doesn't exist yet
-            if (err.code === "not-found" || (err.message && err.message.includes("No document to update"))) {
-                try {
-                    const routeRef = db.collection("routeDays").doc(selectedDate);
-                    const sanitizedDay = JSON.parse(JSON.stringify(normalizeRouteDay(globalDB[selectedDate], currentCategory)));
-                    await routeRef.set(sanitizedDay, { merge: true });
-                } catch (createErr) {
-                    console.error("Firestore document creation error:", createErr);
-                }
-            }
         }
     }
 
@@ -1177,12 +1158,16 @@
         currentData.shops[shop][type][field] = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const updates = [
-            { path: new firebase.firestore.FieldPath(currentCategory, 'shops', shop), value: currentData.shops[shop] },
-            { path: new firebase.firestore.FieldPath(currentCategory, 'activeShops'), value: currentData.activeShops }
-        ];
+        const obj = {
+            [currentCategory]: {
+                shops: {
+                    [shop]: currentData.shops[shop]
+                },
+                activeShops: currentData.activeShops
+            }
+        };
 
-        saveData(updates); 
+        saveData(obj);
         updateShopRowUI(shop); 
         
         const idx = SHOP_LIST.indexOf(shop);
@@ -1231,10 +1216,12 @@
         }
 
         if (driver) setGlobalDriver(driver);
-        const updates = [
-            { path: new firebase.firestore.FieldPath(currentCategory, 'trips'), value: currentData.trips }
-        ];
-        saveData(updates);
+        const obj = {
+            [currentCategory]: {
+                trips: currentData.trips
+            }
+        };
+        saveData(obj);
         resetTripForm();
         renderLogs();
         refreshDynamicUI();
@@ -1259,10 +1246,12 @@
     function deleteTrip(id) {
         if (!confirm("Delete this trip?")) return;
         currentData.trips = (currentData.trips || []).filter(t => t.id !== id);
-        const updates = [
-            { path: new firebase.firestore.FieldPath(currentCategory, 'trips'), value: currentData.trips }
-        ];
-        saveData(updates);
+        const obj = {
+            [currentCategory]: {
+                trips: currentData.trips
+            }
+        };
+        saveData(obj);
         resetTripForm();
         renderLogs();
         refreshDynamicUI();
@@ -1281,12 +1270,16 @@
         currentData.shops[shop].cashReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const updates = [
-            { path: new firebase.firestore.FieldPath(currentCategory, 'shops', shop), value: currentData.shops[shop] },
-            { path: new firebase.firestore.FieldPath(currentCategory, 'activeShops'), value: currentData.activeShops }
-        ];
+        const obj = {
+            [currentCategory]: {
+                shops: {
+                    [shop]: currentData.shops[shop]
+                },
+                activeShops: currentData.activeShops
+            }
+        };
 
-        saveData(updates);
+        saveData(obj);
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1305,12 +1298,16 @@
         currentData.shops[shop].gpayReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const updates = [
-            { path: new firebase.firestore.FieldPath(currentCategory, 'shops', shop), value: currentData.shops[shop] },
-            { path: new firebase.firestore.FieldPath(currentCategory, 'activeShops'), value: currentData.activeShops }
-        ];
+        const obj = {
+            [currentCategory]: {
+                shops: {
+                    [shop]: currentData.shops[shop]
+                },
+                activeShops: currentData.activeShops
+            }
+        };
 
-        saveData(updates);
+        saveData(obj);
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1329,12 +1326,16 @@
         currentData.shops[shop].anandReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const updates = [
-            { path: new firebase.firestore.FieldPath(currentCategory, 'shops', shop), value: currentData.shops[shop] },
-            { path: new firebase.firestore.FieldPath(currentCategory, 'activeShops'), value: currentData.activeShops }
-        ];
+        const obj = {
+            [currentCategory]: {
+                shops: {
+                    [shop]: currentData.shops[shop]
+                },
+                activeShops: currentData.activeShops
+            }
+        };
 
-        saveData(updates);
+        saveData(obj);
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1971,11 +1972,15 @@
 
     function saveTallyData() {
         syncTally();
-        const updates = [
-            { path: new firebase.firestore.FieldPath('PACKET', 'tally'), value: globalDB[selectedDate]['PACKET'].tally },
-            { path: new firebase.firestore.FieldPath('LOOSE', 'tally'), value: globalDB[selectedDate]['LOOSE'].tally }
-        ];
-        saveData(updates);
+        const obj = {
+            PACKET: {
+                tally: globalDB[selectedDate]['PACKET'].tally
+            },
+            LOOSE: {
+                tally: globalDB[selectedDate]['LOOSE'].tally
+            }
+        };
+        saveData(obj);
     }
 
     function addExpense() {
