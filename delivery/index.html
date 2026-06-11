@@ -660,7 +660,7 @@
     }
 
     /* ---- FIRESTORE SAVE ---- */
-    async function saveData(partialUpdate = null) {
+    async function saveData(updates = null) {
         lastSaveTime = Date.now();
         // 1. Update in-memory + localStorage cache immediately (fast / offline)
         if (!globalDB[selectedDate]) globalDB[selectedDate] = {};
@@ -670,8 +670,14 @@
         // 2. Write the current day to its own Firestore document
         try {
             const routeRef = db.collection("routeDays").doc(selectedDate);
-            if (partialUpdate) {
-                await routeRef.update(partialUpdate);
+            if (updates && Array.isArray(updates)) {
+                const args = [];
+                updates.forEach(u => {
+                    args.push(u.path, u.value);
+                });
+                await routeRef.update.apply(routeRef, args);
+            } else if (updates) {
+                await routeRef.update(updates);
             } else {
                 const sanitizedDay = JSON.parse(JSON.stringify(normalizeRouteDay(globalDB[selectedDate], currentCategory)));
                 await routeRef.set(sanitizedDay, { merge: true });
@@ -1171,11 +1177,12 @@
         currentData.shops[shop][type][field] = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const partial = {};
-        partial[new firebase.firestore.FieldPath(currentCategory, 'shops', shop)] = currentData.shops[shop];
-        partial[new firebase.firestore.FieldPath(currentCategory, 'activeShops')] = currentData.activeShops;
+        const updates = [
+            { path: new firebase.firestore.FieldPath(currentCategory, 'shops', shop), value: currentData.shops[shop] },
+            { path: new firebase.firestore.FieldPath(currentCategory, 'activeShops'), value: currentData.activeShops }
+        ];
 
-        saveData(partial); 
+        saveData(updates); 
         updateShopRowUI(shop); 
         
         const idx = SHOP_LIST.indexOf(shop);
@@ -1224,9 +1231,10 @@
         }
 
         if (driver) setGlobalDriver(driver);
-        const partial = {};
-        partial[new firebase.firestore.FieldPath(currentCategory, 'trips')] = currentData.trips;
-        saveData(partial);
+        const updates = [
+            { path: new firebase.firestore.FieldPath(currentCategory, 'trips'), value: currentData.trips }
+        ];
+        saveData(updates);
         resetTripForm();
         renderLogs();
         refreshDynamicUI();
@@ -1251,9 +1259,10 @@
     function deleteTrip(id) {
         if (!confirm("Delete this trip?")) return;
         currentData.trips = (currentData.trips || []).filter(t => t.id !== id);
-        const partial = {};
-        partial[new firebase.firestore.FieldPath(currentCategory, 'trips')] = currentData.trips;
-        saveData(partial);
+        const updates = [
+            { path: new firebase.firestore.FieldPath(currentCategory, 'trips'), value: currentData.trips }
+        ];
+        saveData(updates);
         resetTripForm();
         renderLogs();
         refreshDynamicUI();
@@ -1272,11 +1281,12 @@
         currentData.shops[shop].cashReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const partial = {};
-        partial[new firebase.firestore.FieldPath(currentCategory, 'shops', shop)] = currentData.shops[shop];
-        partial[new firebase.firestore.FieldPath(currentCategory, 'activeShops')] = currentData.activeShops;
+        const updates = [
+            { path: new firebase.firestore.FieldPath(currentCategory, 'shops', shop), value: currentData.shops[shop] },
+            { path: new firebase.firestore.FieldPath(currentCategory, 'activeShops'), value: currentData.activeShops }
+        ];
 
-        saveData(partial);
+        saveData(updates);
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1295,11 +1305,12 @@
         currentData.shops[shop].gpayReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const partial = {};
-        partial[new firebase.firestore.FieldPath(currentCategory, 'shops', shop)] = currentData.shops[shop];
-        partial[new firebase.firestore.FieldPath(currentCategory, 'activeShops')] = currentData.activeShops;
+        const updates = [
+            { path: new firebase.firestore.FieldPath(currentCategory, 'shops', shop), value: currentData.shops[shop] },
+            { path: new firebase.firestore.FieldPath(currentCategory, 'activeShops'), value: currentData.activeShops }
+        ];
 
-        saveData(partial);
+        saveData(updates);
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1318,11 +1329,12 @@
         currentData.shops[shop].anandReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const partial = {};
-        partial[new firebase.firestore.FieldPath(currentCategory, 'shops', shop)] = currentData.shops[shop];
-        partial[new firebase.firestore.FieldPath(currentCategory, 'activeShops')] = currentData.activeShops;
+        const updates = [
+            { path: new firebase.firestore.FieldPath(currentCategory, 'shops', shop), value: currentData.shops[shop] },
+            { path: new firebase.firestore.FieldPath(currentCategory, 'activeShops'), value: currentData.activeShops }
+        ];
 
-        saveData(partial);
+        saveData(updates);
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1959,10 +1971,11 @@
 
     function saveTallyData() {
         syncTally();
-        const partial = {};
-        partial[new firebase.firestore.FieldPath('PACKET', 'tally')] = globalDB[selectedDate]['PACKET'].tally;
-        partial[new firebase.firestore.FieldPath('LOOSE', 'tally')] = globalDB[selectedDate]['LOOSE'].tally;
-        saveData(partial);
+        const updates = [
+            { path: new firebase.firestore.FieldPath('PACKET', 'tally'), value: globalDB[selectedDate]['PACKET'].tally },
+            { path: new firebase.firestore.FieldPath('LOOSE', 'tally'), value: globalDB[selectedDate]['LOOSE'].tally }
+        ];
+        saveData(updates);
     }
 
     function addExpense() {
