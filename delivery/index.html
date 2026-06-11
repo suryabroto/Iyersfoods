@@ -708,8 +708,11 @@
         await hydrateRouteHistoryForBalances(date);
         pastDuesCache = {};
         SHOP_LIST.forEach(shop => {
-            const bal = getPendingBalance(shop, date);
-            if (bal !== 0) pastDuesCache[shop] = bal;
+            const pBal = getPendingBalance(shop, date, 'PACKET');
+            const lBal = getPendingBalance(shop, date, 'LOOSE');
+            if (pBal !== 0 || lBal !== 0) {
+                pastDuesCache[shop] = { PACKET: pBal, LOOSE: lBal };
+            }
         });
         fullRender();
 
@@ -744,8 +747,11 @@
 
             pastDuesCache = {};
             SHOP_LIST.forEach(shop => {
-                const bal = getPendingBalance(shop, date);
-                if (bal !== 0) pastDuesCache[shop] = bal;
+                const pBal = getPendingBalance(shop, date, 'PACKET');
+                const lBal = getPendingBalance(shop, date, 'LOOSE');
+                if (pBal !== 0 || lBal !== 0) {
+                    pastDuesCache[shop] = { PACKET: pBal, LOOSE: lBal };
+                }
             });
             fullRender();
         }, (err) => {
@@ -856,12 +862,12 @@
         currentData = globalDB[date][currentCategory];
     }
 
-    function getShopDayValue(shop, dayData) {
+    function getShopDayValue(shop, dayData, cat = currentCategory) {
         let sold = 0;
         let paid = 0;
-        const cats = [currentCategory];
-        cats.forEach(cat => {
-            const s = dayData?.[cat]?.shops?.[shop];
+        const cats = cat === 'BOTH' ? ['PACKET', 'LOOSE'] : [cat];
+        cats.forEach(c => {
+            const s = dayData?.[c]?.shops?.[shop];
             if (!s) return;
             const pD = getPrice(shop, 'dosa');
             const pA = getPrice(shop, 'appam');
@@ -884,26 +890,37 @@
         );
     }
 
-    function getPendingBalance(shop, beforeDate) {
+    function getPendingBalance(shop, beforeDate, cat = currentCategory) {
+        if (beforeDate === selectedDate && pastDuesCache[shop]) {
+            if (cat === 'BOTH') {
+                return (pastDuesCache[shop].PACKET || 0) + (pastDuesCache[shop].LOOSE || 0);
+            }
+            return pastDuesCache[shop][cat] || 0;
+        }
+
+        if (cat === 'BOTH') {
+            return getPendingBalance(shop, beforeDate, 'PACKET') + getPendingBalance(shop, beforeDate, 'LOOSE');
+        }
+
         return Object.keys(globalDB)
             .filter(date => date < beforeDate)
             .sort()
             .reduce((total, date) => {
-                const day = getShopDayValue(shop, globalDB[date]);
+                const day = getShopDayValue(shop, globalDB[date], cat);
                 return total + day.sold - day.paid;
             }, 0);
     }
 
-    function getDuesBreakdown(shop, uptoDate) {
+    function getDuesBreakdown(shop, uptoDate, cat = currentCategory) {
         return Object.keys(globalDB)
             .filter(date => date <= uptoDate)
             .sort()
             .map(date => {
                 const dayData = globalDB[date] || {};
                 let dosa = 0, appam = 0, value = 0, cash = 0;
-                const cats = [currentCategory];
-                cats.forEach(cat => {
-                    const s = dayData?.[cat]?.shops?.[shop];
+                const cats = cat === 'BOTH' ? ['PACKET', 'LOOSE'] : [cat];
+                cats.forEach(c => {
+                    const s = dayData?.[c]?.shops?.[shop];
                     if (!s) return;
                     const dQty = (Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0);
                     const aQty = (Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0);
@@ -925,7 +942,7 @@
             .reduce((found, date) => {
                 if (found) return found;
                 const dayData = globalDB[date] || {};
-                for (const cat of [currentCategory]) {
+                for (const cat of ['PACKET', 'LOOSE']) {
                     const driver = dayData?.[cat]?.shops?.[shop]?.driver;
                     if (driver) return driver;
                 }
@@ -1312,22 +1329,19 @@
     }
     
     function updateShopBalance(shop, idx) {
-        const prevDues = pastDuesCache[shop] !== undefined ? pastDuesCache[shop] : getPendingBalance(shop, selectedDate);
+        const prevDues = getPendingBalance(shop, selectedDate, currentCategory);
         let todayBillValue = 0;
         let paid = 0;
         const pD = getPrice(shop, 'dosa');
         const pA = getPrice(shop, 'appam');
 
         const dayData = globalDB[selectedDate] || {};
-        const cats = [currentCategory];
-        cats.forEach(cat => {
-            const s = dayData?.[cat]?.shops?.[shop];
-            if (s) {
-                todayBillValue += ((Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0)) * pD;
-                todayBillValue += ((Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0)) * pA;
-                paid += getPaymentTotal(s);
-            }
-        });
+        const s = dayData?.[currentCategory]?.shops?.[shop];
+        if (s) {
+            todayBillValue += ((Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0)) * pD;
+            todayBillValue += ((Number(s.appam?.sale) || 0) + (Number(s.appam?.cr) || 0)) * pA;
+            paid += getPaymentTotal(s);
+        }
 
         const balance = prevDues + todayBillValue - paid;
         const balEl = document.getElementById(`balance-${idx}`);
@@ -1430,7 +1444,7 @@
         
         // 1. Get ALL unique shops that have activity today or past dues
         const allShopsSet = new Set(Object.keys(pastDuesCache));
-        const cats = [currentCategory];
+        const cats = ['PACKET', 'LOOSE'];
         cats.forEach(cat => {
             if(dayData[cat] && dayData[cat].activeShops) {
                 dayData[cat].activeShops.forEach(s => allShopsSet.add(s));
@@ -1441,7 +1455,7 @@
         let shopIdx = 0;
 
         sortedShops.forEach(shop => {
-            const pastDues = Number(pastDuesCache[shop]) || 0;
+            const pastDues = getPendingBalance(shop, selectedDate, 'BOTH');
             let todaySaleVal = 0;
             let todayPaid = 0;
             let todayCreditOnly = 0;
@@ -1474,7 +1488,7 @@
                 shopIdx++;
 
                 const creditTag = todayCreditOnly > 0 ? `<div style="font-size:10px; color:#ef4444; margin-top:4px; font-weight:800; background:#fee2e2; padding:2px 6px; border-radius:4px; display:inline-block">NEW CREDIT: ₹${todayCreditOnly}</div>` : "";
-                const breakdown = getDuesBreakdown(shop, selectedDate);
+                const breakdown = getDuesBreakdown(shop, selectedDate, 'BOTH');
                 const breakdownHTML = breakdown.map(b => `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid #fef3c7; font-size:11px">
                         <div style="display:flex; flex-direction:column">
@@ -1927,10 +1941,8 @@
         }
 
         SHOP_LIST.forEach((shop, idx) => {
-            if(currentData.shops[shop]) {
-                updateShopRowUI(shop);
-                updateShopBalance(shop, idx);
-            }
+            updateShopRowUI(shop);
+            updateShopBalance(shop, idx);
         });
     }
 
@@ -2090,25 +2102,25 @@
         const dayData = globalDB[selectedDate] || {};
         const allShopsSet = new Set();
         
-        // Determine which categories to process
-        const catsToProcess = [currentCategory];
-
         // Get Cash in Hand from the CURRENT category (synced with the other category)
         const activeTally = currentData.tally || {};
         stats.cashInHand = Number(activeTally.cashInHandMap ? activeTally.cashInHandMap[filterDriver || ''] : 0) || 0;
 
-        catsToProcess.forEach(cat => {
+        const cats = ['PACKET', 'LOOSE'];
+        cats.forEach(cat => {
             const catData = dayData[cat];
             if(!catData) return;
                 
-            // 2. Aggregate LOADS (Trips) - combined across both categories for full day stats
-            const trips = (catData.trips || []).filter(t => !filterDriver || t.driver === filterDriver);
-            trips.forEach(t => {
-                stats.dosa.load += Number(t.dosa) || 0;
-                stats.appam.load += Number(t.appam) || 0;
-            });
+            // 2. Aggregate LOADS (Trips) - ONLY for currentCategory
+            if (cat === currentCategory) {
+                const trips = (catData.trips || []).filter(t => !filterDriver || t.driver === filterDriver);
+                trips.forEach(t => {
+                    stats.dosa.load += Number(t.dosa) || 0;
+                    stats.appam.load += Number(t.appam) || 0;
+                });
+            }
 
-            // 3. Expenses & Extra Income - only for current category to avoid double counting
+            // 3. Expenses & Extra Income - only for current category to avoid double counting (since they are synced)
             if (cat === currentCategory) {
                 const tally = catData.tally || { expenses: [], extraIncome: [], cashInHandMap: {} };
                 const filteredExpenses = (tally.expenses || []).filter(e => !filterDriver || e.driver === filterDriver);
@@ -2118,7 +2130,7 @@
                 filteredExtra.forEach(ei => stats.totalExtraIncome += (Number(ei.amount)||0));
             }
             
-            // 4. Aggregate SHOP SALES - combined across both categories
+            // 4. Aggregate SHOP SALES & PAYMENTS
             const shops = catData.shops || {};
             Object.keys(shops).forEach(shop => {
                 const s = shops[shop];
@@ -2134,21 +2146,20 @@
                 const aDmg = Number(s.appam?.dmg)||0;
                 const aFree = Number(s.appam?.free)||0;
 
-                const pD = getPrice(shop, 'dosa');
-                const pA = getPrice(shop, 'appam');
+                // Product quantities are only aggregated for currentCategory
+                if (cat === currentCategory) {
+                    stats.dosa.sold += dSale;
+                    stats.dosa.credit += dCr; 
+                    stats.dosa.dmg += dDmg;
+                    stats.dosa.free += dFree;
 
-                // Product Stats (combined across all categories)
-                stats.dosa.sold += dSale;
-                stats.dosa.credit += dCr; 
-                stats.dosa.dmg += dDmg;
-                stats.dosa.free += dFree;
+                    stats.appam.sold += aSale;
+                    stats.appam.credit += aCr;
+                    stats.appam.dmg += aDmg;
+                    stats.appam.free += aFree;
+                }
 
-                stats.appam.sold += aSale;
-                stats.appam.credit += aCr;
-                stats.appam.dmg += aDmg;
-                stats.appam.free += aFree;
-
-                // Cash, Gpay & Anand Collected (always combined across categories)
+                // Cash, Gpay & Anand Collected are aggregated across BOTH categories
                 const cash = (Number(s.cashReceived) || 0);
                 const gpay = (Number(s.gpayReceived) || 0);
                 const anand = (Number(s.anandReceived) || 0);
@@ -2170,39 +2181,37 @@
             });
         });
 
-        // Sum Outstanding for all shops ever visited
+        // Sum Outstanding & Credits list for all shops ever visited
         allShopsSet.forEach(shop => {
-            const prevDues = pastDuesCache[shop] !== undefined ? pastDuesCache[shop] : getPendingBalance(shop, selectedDate);
-            let todaySaleVal = 0;
-            let shopCashRec = 0;
+            let shopOutstandingBoth = 0;
             let dCrTotal = 0;
             let aCrTotal = 0;
-            let currentShopDriver = null;
             
             // Loop through BOTH categories to get today's true sales and payments
-            catsToProcess.forEach(cat => {
+            cats.forEach(cat => {
+                const prevDues = getPendingBalance(shop, selectedDate, cat);
                 const catObj = dayData[cat];
+                let todaySaleVal = 0;
+                let shopCashRec = 0;
                 if (catObj && catObj.shops) {
                     const s = catObj.shops[shop];
                     if (s) {
                         const pD = getPrice(shop, 'dosa');
                         const pA = getPrice(shop, 'appam');
-                        todaySaleVal += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * pD + 
+                        todaySaleVal = ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * pD + 
                                        ((Number(s.appam?.sale)||0) + (Number(s.appam?.cr)||0)) * pA;
-                        shopCashRec += (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0) + (Number(s.anandReceived) || 0);
+                        shopCashRec = (Number(s.cashReceived) || 0) + (Number(s.gpayReceived) || 0) + (Number(s.anandReceived) || 0);
                         
-                        // We aggregate the credit given today across all categories for tally purposes
                         dCrTotal += (Number(s.dosa?.cr)||0);
                         aCrTotal += (Number(s.appam?.cr)||0);
-                        
-                        if (s.driver) currentShopDriver = s.driver;
                     }
                 }
+                shopOutstandingBoth += (prevDues + todaySaleVal - shopCashRec);
             });
             
-            const ownerDriver = currentShopDriver || getLastDriver(shop, selectedDate);
+            const ownerDriver = getLastDriver(shop, selectedDate);
             if (!filterDriver || ownerDriver === filterDriver) {
-                stats.totalOutstanding += (prevDues + todaySaleVal - shopCashRec);
+                stats.totalOutstanding += shopOutstandingBoth;
                 
                 const creditVal = (dCrTotal * getPrice(shop, 'dosa')) + (aCrTotal * getPrice(shop, 'appam'));
                 if(creditVal > 0.1) stats.credits.push({ name: shop, value: creditVal });
