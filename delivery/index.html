@@ -1442,38 +1442,38 @@
         let grandTotalDues = 0;
         const dayData = globalDB[selectedDate] || {};
         
-        // 1. Get ALL unique shops that have activity today or past dues
-        const allShopsSet = new Set(Object.keys(pastDuesCache));
-        const cats = ['PACKET', 'LOOSE'];
-        cats.forEach(cat => {
-            if(dayData[cat] && dayData[cat].activeShops) {
-                dayData[cat].activeShops.forEach(s => allShopsSet.add(s));
+        // 1. Get ALL unique shops that have activity today or past dues for currentCategory
+        const allShopsSet = new Set();
+        SHOP_LIST.forEach(shop => {
+            if (pastDuesCache[shop] && pastDuesCache[shop][currentCategory] !== 0) {
+                allShopsSet.add(shop);
             }
         });
+        if (dayData[currentCategory] && dayData[currentCategory].activeShops) {
+            dayData[currentCategory].activeShops.forEach(s => allShopsSet.add(s));
+        }
         
         const sortedShops = Array.from(allShopsSet).sort();
         let shopIdx = 0;
 
         sortedShops.forEach(shop => {
-            const pastDues = getPendingBalance(shop, selectedDate, 'BOTH');
+            const pastDues = getPendingBalance(shop, selectedDate, currentCategory);
             let todaySaleVal = 0;
             let todayPaid = 0;
             let todayCreditOnly = 0;
             let currentDriverName = null;
 
-            cats.forEach(cat => {
-                const cObj = dayData[cat];
-                if(!cObj || !cObj.shops || !cObj.shops[shop]) return;
-                const sd = cObj.shops[shop];
+            const sd = dayData[currentCategory]?.shops?.[shop];
+            if (sd) {
                 const pD = getPrice(shop, 'dosa');
                 const pA = getPrice(shop, 'appam');
                 
-                todaySaleVal += ((Number(sd.dosa?.sale)||0) + (Number(sd.dosa?.cr)||0)) * pD + 
+                todaySaleVal = ((Number(sd.dosa?.sale)||0) + (Number(sd.dosa?.cr)||0)) * pD + 
                               ((Number(sd.appam?.sale)||0) + (Number(sd.appam?.cr)||0)) * pA;
-                todayPaid += getPaymentTotal(sd);
-                todayCreditOnly += (Number(sd.dosa?.cr)||0) * pD + (Number(sd.appam?.cr)||0) * pA;
+                todayPaid = getPaymentTotal(sd);
+                todayCreditOnly = (Number(sd.dosa?.cr)||0) * pD + (Number(sd.appam?.cr)||0) * pA;
                 if(sd.driver) currentDriverName = sd.driver;
-            });
+            }
 
             const totalOutstanding = pastDues + todaySaleVal - todayPaid;
 
@@ -1488,7 +1488,7 @@
                 shopIdx++;
 
                 const creditTag = todayCreditOnly > 0 ? `<div style="font-size:10px; color:#ef4444; margin-top:4px; font-weight:800; background:#fee2e2; padding:2px 6px; border-radius:4px; display:inline-block">NEW CREDIT: ₹${todayCreditOnly}</div>` : "";
-                const breakdown = getDuesBreakdown(shop, selectedDate, 'BOTH');
+                const breakdown = getDuesBreakdown(shop, selectedDate, currentCategory);
                 const breakdownHTML = breakdown.map(b => `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid #fef3c7; font-size:11px">
                         <div style="display:flex; flex-direction:column">
@@ -1529,7 +1529,10 @@
         }
         card.style.display = found ? 'block' : 'none';
         const headSpan = card.querySelector('.card-head span:first-child');
-        if(headSpan) headSpan.innerText = selectedDriver ? `Pending Collections (${selectedDriver})` : "Pending Collections";
+        if(headSpan) {
+            const catLabel = currentCategory === 'PACKET' ? 'Packet' : 'Loose';
+            headSpan.innerText = selectedDriver ? `Pending Collections (${selectedDriver} - ${catLabel})` : `Pending Collections (${catLabel})`;
+        }
     }
     
     function renderStats() {
