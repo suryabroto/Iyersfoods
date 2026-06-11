@@ -660,7 +660,7 @@
     }
 
     /* ---- FIRESTORE SAVE ---- */
-    async function saveData() {
+    async function saveData(partialUpdate = null) {
         lastSaveTime = Date.now();
         // 1. Update in-memory + localStorage cache immediately (fast / offline)
         if (!globalDB[selectedDate]) globalDB[selectedDate] = {};
@@ -670,10 +670,24 @@
         // 2. Write the current day to its own Firestore document
         try {
             const routeRef = db.collection("routeDays").doc(selectedDate);
-            const sanitizedDay = JSON.parse(JSON.stringify(normalizeRouteDay(globalDB[selectedDate], currentCategory)));
-            await routeRef.set(sanitizedDay, { merge: true });
+            if (partialUpdate) {
+                await routeRef.update(partialUpdate);
+            } else {
+                const sanitizedDay = JSON.parse(JSON.stringify(normalizeRouteDay(globalDB[selectedDate], currentCategory)));
+                await routeRef.set(sanitizedDay, { merge: true });
+            }
         } catch (err) {
             console.error("Firestore save error:", err);
+            // Fallback to set if document doesn't exist yet
+            if (err.code === "not-found" || (err.message && err.message.includes("No document to update"))) {
+                try {
+                    const routeRef = db.collection("routeDays").doc(selectedDate);
+                    const sanitizedDay = JSON.parse(JSON.stringify(normalizeRouteDay(globalDB[selectedDate], currentCategory)));
+                    await routeRef.set(sanitizedDay, { merge: true });
+                } catch (createErr) {
+                    console.error("Firestore document creation error:", createErr);
+                }
+            }
         }
     }
 
@@ -700,22 +714,7 @@
         fullRender();
 
         // Step 2: Set up real-time listener on the per-day route document
-        unsubscribeSnapshot = db.collection("routeDays").doc(date).onSnapshot({ includeMetadataChanges: true }, async (snap) => {
-            // Priority Check: Is this a local write or are we in a typing cooldown?
-            const isLocal = snap.metadata.hasPendingWrites;
-            const now = Date.now();
-            const recentlyTyped = (now - lastSaveTime) < 2000;
-
-            // CRITICAL FIX: Guard BEFORE overwriting globalDB/currentData.
-            // Overwriting currentData with a stale Firestore snapshot while the user is
-            // typing was the root cause of Today's Sale resetting to ₹0 on credit entry.
-            if (isLocal || recentlyTyped) {
-                console.log("Sync skipped (Active Typing)");
-                // Still persist to localStorage for cross-tab awareness, but
-                // do NOT overwrite the live in-memory globalDB / currentData.
-                return;
-            }
-
+        unsubscribeSnapshot = db.collection("routeDays").doc(date).onSnapshot(async (snap) => {
             if (snap.exists) {
                 globalDB[date] = normalizeRouteDay(snap.data(), currentCategory);
                 if (isSingleCategoryRoutePayload(snap.data())) {
@@ -860,7 +859,8 @@
     function getShopDayValue(shop, dayData) {
         let sold = 0;
         let paid = 0;
-        ['PACKET', 'LOOSE'].forEach(cat => {
+        const cats = [currentCategory];
+        cats.forEach(cat => {
             const s = dayData?.[cat]?.shops?.[shop];
             if (!s) return;
             const pD = getPrice(shop, 'dosa');
@@ -901,7 +901,8 @@
             .map(date => {
                 const dayData = globalDB[date] || {};
                 let dosa = 0, appam = 0, value = 0, cash = 0;
-                ['PACKET', 'LOOSE'].forEach(cat => {
+                const cats = [currentCategory];
+                cats.forEach(cat => {
                     const s = dayData?.[cat]?.shops?.[shop];
                     if (!s) return;
                     const dQty = (Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0);
@@ -924,7 +925,7 @@
             .reduce((found, date) => {
                 if (found) return found;
                 const dayData = globalDB[date] || {};
-                for (const cat of ['PACKET', 'LOOSE']) {
+                for (const cat of [currentCategory]) {
                     const driver = dayData?.[cat]?.shops?.[shop]?.driver;
                     if (driver) return driver;
                 }
@@ -1152,7 +1153,12 @@
         
         currentData.shops[shop][type][field] = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
-        saveData(); 
+
+        const partial = {};
+        partial[new firebase.firestore.FieldPath(currentCategory, 'shops', shop)] = currentData.shops[shop];
+        partial[new firebase.firestore.FieldPath(currentCategory, 'activeShops')] = currentData.activeShops;
+
+        saveData(partial); 
         updateShopRowUI(shop); 
         
         const idx = SHOP_LIST.indexOf(shop);
@@ -1201,7 +1207,9 @@
         }
 
         if (driver) setGlobalDriver(driver);
-        saveData();
+        const partial = {};
+        partial[new firebase.firestore.FieldPath(currentCategory, 'trips')] = currentData.trips;
+        saveData(partial);
         resetTripForm();
         renderLogs();
         refreshDynamicUI();
@@ -1226,7 +1234,9 @@
     function deleteTrip(id) {
         if (!confirm("Delete this trip?")) return;
         currentData.trips = (currentData.trips || []).filter(t => t.id !== id);
-        saveData();
+        const partial = {};
+        partial[new firebase.firestore.FieldPath(currentCategory, 'trips')] = currentData.trips;
+        saveData(partial);
         resetTripForm();
         renderLogs();
         refreshDynamicUI();
@@ -1244,7 +1254,12 @@
         currentData.shops[shop] = normalizeShopEntry(currentData.shops[shop]);
         currentData.shops[shop].cashReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
-        saveData();
+
+        const partial = {};
+        partial[new firebase.firestore.FieldPath(currentCategory, 'shops', shop)] = currentData.shops[shop];
+        partial[new firebase.firestore.FieldPath(currentCategory, 'activeShops')] = currentData.activeShops;
+
+        saveData(partial);
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1262,7 +1277,12 @@
         currentData.shops[shop] = normalizeShopEntry(currentData.shops[shop]);
         currentData.shops[shop].gpayReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
-        saveData();
+
+        const partial = {};
+        partial[new firebase.firestore.FieldPath(currentCategory, 'shops', shop)] = currentData.shops[shop];
+        partial[new firebase.firestore.FieldPath(currentCategory, 'activeShops')] = currentData.activeShops;
+
+        saveData(partial);
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1280,7 +1300,12 @@
         currentData.shops[shop] = normalizeShopEntry(currentData.shops[shop]);
         currentData.shops[shop].anandReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
-        saveData();
+
+        const partial = {};
+        partial[new firebase.firestore.FieldPath(currentCategory, 'shops', shop)] = currentData.shops[shop];
+        partial[new firebase.firestore.FieldPath(currentCategory, 'activeShops')] = currentData.activeShops;
+
+        saveData(partial);
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1294,7 +1319,8 @@
         const pA = getPrice(shop, 'appam');
 
         const dayData = globalDB[selectedDate] || {};
-        ['PACKET', 'LOOSE'].forEach(cat => {
+        const cats = [currentCategory];
+        cats.forEach(cat => {
             const s = dayData?.[cat]?.shops?.[shop];
             if (s) {
                 todayBillValue += ((Number(s.dosa?.sale) || 0) + (Number(s.dosa?.cr) || 0)) * pD;
@@ -1404,7 +1430,7 @@
         
         // 1. Get ALL unique shops that have activity today or past dues
         const allShopsSet = new Set(Object.keys(pastDuesCache));
-        const cats = ['PACKET', 'LOOSE'];
+        const cats = [currentCategory];
         cats.forEach(cat => {
             if(dayData[cat] && dayData[cat].activeShops) {
                 dayData[cat].activeShops.forEach(s => allShopsSet.add(s));
@@ -1736,7 +1762,8 @@
         // Logic: Show shops that HAVE activity today OR shops that historically belong to this route (if no search)
         const dayData = globalDB[selectedDate] || {};
         const activeShopsCombined = [];
-        ['PACKET', 'LOOSE'].forEach(cat => {
+        const cats = [currentCategory];
+        cats.forEach(cat => {
            const arr = dayData[cat]?.activeShops || [];
            arr.forEach(shop => {
                if (!activeShopsCombined.includes(shop)) {
@@ -1797,7 +1824,8 @@
             const pA = getPrice(shop, 'appam');
             let totalValToday = 0;
             const dayData = globalDB[selectedDate] || {};
-            ['PACKET', 'LOOSE'].forEach(cat => {
+            const cats = [currentCategory];
+            cats.forEach(cat => {
                 const s = dayData?.[cat]?.shops?.[shop];
                 if(s) {
                     totalValToday += ((Number(s.dosa?.sale)||0) + (Number(s.dosa?.cr)||0)) * getPrice(shop, 'dosa') + 
@@ -1824,18 +1852,18 @@
                     </div>
                     <div id="panel-dosa-${idx}" class="input-panel ${prefTab==='dosa'?'active':''}">
                         <div class="input-grid">
-                            <div><label>Sale</label><input type="number" class="qty-input sale" data-focus-id="sale-dosa-${idx}" oninput="updateShopData('${shop}','dosa','sale',this.value)" value="${data.dosa.sale}"></div>
-                            <div><label>Credit</label><input type="number" class="qty-input cred" data-focus-id="cr-dosa-${idx}" oninput="updateShopData('${shop}','dosa','cr',this.value)" value="${data.dosa.cr}"></div>
-                            <div><label>Dmg</label><input type="number" class="qty-input" data-focus-id="dmg-dosa-${idx}" oninput="updateShopData('${shop}','dosa','dmg',this.value)" value="${data.dosa.dmg}"></div>
-                            <div><label>Free</label><input type="number" class="qty-input" data-focus-id="free-dosa-${idx}" oninput="updateShopData('${shop}','dosa','free',this.value)" value="${data.dosa.free}"></div>
+                            <div><label>Sale</label><input type="number" class="qty-input sale" data-focus-id="sale-dosa-${idx}" onchange="updateShopData('${shop}','dosa','sale',this.value)" value="${data.dosa.sale}"></div>
+                            <div><label>Credit</label><input type="number" class="qty-input cred" data-focus-id="cr-dosa-${idx}" onchange="updateShopData('${shop}','dosa','cr',this.value)" value="${data.dosa.cr}"></div>
+                            <div><label>Dmg</label><input type="number" class="qty-input" data-focus-id="dmg-dosa-${idx}" onchange="updateShopData('${shop}','dosa','dmg',this.value)" value="${data.dosa.dmg}"></div>
+                            <div><label>Free</label><input type="number" class="qty-input" data-focus-id="free-dosa-${idx}" onchange="updateShopData('${shop}','dosa','free',this.value)" value="${data.dosa.free}"></div>
                         </div>
                     </div>
                     <div id="panel-appam-${idx}" class="input-panel ${prefTab==='appam'?'active':''}">
                         <div class="input-grid">
-                            <div><label>Sale</label><input type="number" class="qty-input sale" data-focus-id="sale-appam-${idx}" oninput="updateShopData('${shop}','appam','sale',this.value)" value="${data.appam.sale}"></div>
-                            <div><label>Credit</label><input type="number" class="qty-input cred" data-focus-id="cr-appam-${idx}" oninput="updateShopData('${shop}','appam','cr',this.value)" value="${data.appam.cr}"></div>
-                            <div><label>Dmg</label><input type="number" class="qty-input" data-focus-id="dmg-appam-${idx}" oninput="updateShopData('${shop}','appam','dmg',this.value)" value="${data.appam.dmg}"></div>
-                            <div><label>Free</label><input type="number" class="qty-input" data-focus-id="free-appam-${idx}" oninput="updateShopData('${shop}','appam','free',this.value)" value="${data.appam.free}"></div>
+                            <div><label>Sale</label><input type="number" class="qty-input sale" data-focus-id="sale-appam-${idx}" onchange="updateShopData('${shop}','appam','sale',this.value)" value="${data.appam.sale}"></div>
+                            <div><label>Credit</label><input type="number" class="qty-input cred" data-focus-id="cr-appam-${idx}" onchange="updateShopData('${shop}','appam','cr',this.value)" value="${data.appam.cr}"></div>
+                            <div><label>Dmg</label><input type="number" class="qty-input" data-focus-id="dmg-appam-${idx}" onchange="updateShopData('${shop}','appam','dmg',this.value)" value="${data.appam.dmg}"></div>
+                            <div><label>Free</label><input type="number" class="qty-input" data-focus-id="free-appam-${idx}" onchange="updateShopData('${shop}','appam','free',this.value)" value="${data.appam.free}"></div>
                         </div>
                     </div>
                     
@@ -1854,21 +1882,21 @@
                             <label style="font-size:10px; font-weight:700; color:#64748b; display:block; margin-bottom:4px">TOTAL CASH RECEIVED</label>
                             <input type="number" class="qty-input" style="width:100%; font-size:16px; font-weight:700; background:#f0fdf4; border-color:#86efac" 
                                 data-focus-id="cash-${idx}"
-                                oninput="updateCashReceived('${shop}', this.value, ${idx})" 
+                                onchange="updateCashReceived('${shop}', this.value, ${idx})" 
                                 value="${data.cashReceived || ''}" placeholder="Enter cash amount...">
                         </div>
                         <div style="margin-bottom:12px">
                             <label style="font-size:10px; font-weight:700; color:#64748b; display:block; margin-bottom:4px">TOTAL GPAY RECEIVED</label>
                             <input type="number" class="qty-input" style="width:100%; font-size:16px; font-weight:700; background:#eff6ff; border-color:#93c5fd" 
                                 data-focus-id="gpay-${idx}"
-                                oninput="updateGpayReceived('${shop}', this.value, ${idx})" 
+                                onchange="updateGpayReceived('${shop}', this.value, ${idx})" 
                                 value="${data.gpayReceived || ''}" placeholder="Enter Gpay amount...">
                         </div>
                         <div style="margin-bottom:12px">
                             <label style="font-size:10px; font-weight:700; color:#64748b; display:block; margin-bottom:4px">TOTAL ANAND RECEIVED</label>
                             <input type="number" class="qty-input" style="width:100%; font-size:16px; font-weight:700; background:#fff1f2; border-color:#fda4af" 
                                 data-focus-id="anand-${idx}"
-                                oninput="updateAnandReceived('${shop}', this.value, ${idx})" 
+                                onchange="updateAnandReceived('${shop}', this.value, ${idx})" 
                                 value="${data.anandReceived || ''}" placeholder="Enter Anand amount...">
                         </div>
                         <div style="padding:10px; background:#f1f5f9; border-radius:6px; text-align:center; border:1px solid #e2e8f0">
@@ -1914,12 +1942,19 @@
         }
     }
 
+    function saveTallyData() {
+        syncTally();
+        const partial = {};
+        partial[new firebase.firestore.FieldPath('PACKET', 'tally')] = globalDB[selectedDate]['PACKET'].tally;
+        partial[new firebase.firestore.FieldPath('LOOSE', 'tally')] = globalDB[selectedDate]['LOOSE'].tally;
+        saveData(partial);
+    }
+
     function addExpense() {
         if(!currentData.tally) currentData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] };
         if(!currentData.tally.expenses) currentData.tally.expenses = [];
         currentData.tally.expenses.push({ id: generateId(), detail: '', amount: '', driver: selectedDriver });
-        syncTally();
-        saveData();
+        saveTallyData();
         renderTally();
     }
 
@@ -1935,8 +1970,7 @@
                 localIdx++;
             }
         }
-        syncTally();
-        saveData();
+        saveTallyData();
         // OPTIMIZATION: Only update totals to keep input focus intact
         updateTallyReconciliationUI();
     }
@@ -1954,8 +1988,7 @@
                 localIdx++;
             }
         }
-        syncTally();
-        saveData();
+        saveTallyData();
         renderTally();
     }
 
@@ -1964,8 +1997,7 @@
         if(!currentData.tally) currentData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] };
         if(!currentData.tally.extraIncome) currentData.tally.extraIncome = [];
         currentData.tally.extraIncome.push({ id: generateId(), item: '', amount: '', driver: selectedDriver });
-        syncTally();
-        saveData();
+        saveTallyData();
         renderTally();
     }
 
@@ -1981,8 +2013,7 @@
                 localIdx++;
             }
         }
-        syncTally();
-        saveData();
+        saveTallyData();
         // OPTIMIZATION: Only update totals to keep input focus intact
         updateTallyReconciliationUI();
     }
@@ -2000,8 +2031,7 @@
                 localIdx++;
             }
         }
-        syncTally();
-        saveData();
+        saveTallyData();
         renderTally();
     }
     
@@ -2009,8 +2039,7 @@
         if(!currentData.tally) currentData.tally = { cashInHandMap: {}, denomsMap: {}, expenses: [], extraIncome: [] };
         if(!currentData.tally.cashInHandMap) currentData.tally.cashInHandMap = {};
         currentData.tally.cashInHandMap[selectedDriver || ''] = val;
-        syncTally();
-        saveData();
+        saveTallyData();
         updateTallyReconciliationUI();
     }
 
@@ -2062,8 +2091,7 @@
         const allShopsSet = new Set();
         
         // Determine which categories to process
-        // We always process both PACKET and LOOSE for daily financial reconciliation
-        const catsToProcess = ['PACKET', 'LOOSE'];
+        const catsToProcess = [currentCategory];
 
         // Get Cash in Hand from the CURRENT category (synced with the other category)
         const activeTally = currentData.tally || {};
@@ -2243,10 +2271,10 @@
 
         let expHTML = filteredExpenses.map((e, i) => `
             <div style="display:flex; gap:8px; align-items:center; padding:4px 0; border-bottom:1px dashed #e2e8f0; font-size:12px; color:#64748b">
-                <input id="exp-detail-${i}" type="text" placeholder="Expense Detail" value="${e.detail}" oninput="updateExpense(${i},'detail',this.value)" style="flex:2; border:none; background:transparent; font-size:12px; font-weight:600; outline:none; border-bottom:1px dashed #e2e8f0">
+                <input id="exp-detail-${i}" type="text" placeholder="Expense Detail" value="${e.detail}" onchange="updateExpense(${i},'detail',this.value)" style="flex:2; border:none; background:transparent; font-size:12px; font-weight:600; outline:none; border-bottom:1px dashed #e2e8f0">
                 <div style="display:flex; align-items:center; gap:8px; flex:1">
                     <span style="font-weight:700; color:var(--danger)">₹</span>
-                    <input id="exp-amount-${i}" type="number" placeholder="0" value="${e.amount}" oninput="updateExpense(${i},'amount',this.value)" style="width:100%; border:none; background:transparent; font-size:12px; font-weight:700; color:var(--danger); outline:none; border-bottom:1px dashed #fee2e2">
+                    <input id="exp-amount-${i}" type="number" placeholder="0" value="${e.amount}" onchange="updateExpense(${i},'amount',this.value)" style="width:100%; border:none; background:transparent; font-size:12px; font-weight:700; color:var(--danger); outline:none; border-bottom:1px dashed #fee2e2">
                     <button onclick="deleteExpense(${i})" style="color:#cbd5e1; border:none; background:none; font-size:16px; cursor:pointer">×</button>
                 </div>
             </div>
@@ -2383,7 +2411,7 @@
                                     <div style="width:40px; font-weight:800; color:#475569; font-size:13px">₹${val}</div>
                                     <div style="color:#cbd5e1; font-size:10px">×</div>
                                     <input type="number" placeholder="0" value="${qty}" 
-                                        oninput="updateDenom(${val}, this.value)"
+                                        onchange="updateDenom(${val}, this.value)"
                                         style="flex:1; background:white; border:1px solid #e2e8f0; border-radius:6px; padding:6px 8px; font-weight:700; font-size:14px; color:#0f172a; outline:none; text-align:center">
                                     <div id="denom-sub-${val}" style="width:80px; text-align:right; font-weight:800; color:#0f172a; font-size:14px">₹${((Number(qty)||0) * val).toLocaleString()}</div>
                                 </div>
@@ -2429,10 +2457,10 @@
                         <div style="font-size:11px; font-weight:800; color:#cbd5e1; margin-bottom:12px; text-transform:uppercase">One-off Extra Income</div>
                         ${(currentData.tally.extraIncome || []).map((ei, i) => `
                         <div style="display:flex; gap:8px; align-items:center; padding:4px 0; border-bottom:1px dashed #e2e8f0; font-size:12px; color:#64748b">
-                             <input type="text" placeholder="Extra Item" value="${ei.item}" oninput="updateExtraIncome(${i},'item',this.value)" style="flex:2; border:none; background:transparent; font-size:12px; font-weight:600; outline:none; border-bottom:1px dashed #e2e8f0">
+                             <input type="text" placeholder="Extra Item" value="${ei.item}" onchange="updateExtraIncome(${i},'item',this.value)" style="flex:2; border:none; background:transparent; font-size:12px; font-weight:600; outline:none; border-bottom:1px dashed #e2e8f0">
                              <div style="display:flex; align-items:center; gap:8px; flex:1">
                                  <span style="font-weight:700; color:var(--success)">+ ₹</span>
-                                 <input type="number" placeholder="0" value="${ei.amount}" oninput="updateExtraIncome(${i},'amount',this.value)" style="width:100%; border:none; background:transparent; font-size:12px; font-weight:700; color:var(--success); outline:none; border-bottom:1px dashed #86efac">
+                                 <input type="number" placeholder="0" value="${ei.amount}" onchange="updateExtraIncome(${i},'amount',this.value)" style="width:100%; border:none; background:transparent; font-size:12px; font-weight:700; color:var(--success); outline:none; border-bottom:1px dashed #86efac">
                                  <button onclick="deleteExtraIncome(${i})" style="color:#cbd5e1; border:none; background:none; font-size:16px; cursor:pointer">×</button>
                              </div>
                         </div>`).join('')}
