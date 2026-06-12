@@ -311,7 +311,7 @@
 
 <div class="app-wrapper">
     <nav class="sidebar" id="sidebar">
-        <div class="sidebar-brand">IyersRoute<span>.V3</span></div>
+        <div class="sidebar-brand">IyersRoute<span>.V3.1-fix</span></div>
         <ul class="nav-list">
              <li class="nav-item active" onclick="switchSection('overview')"><span class="nav-icon">📊</span> Overview</li>
              <li class="nav-item" onclick="switchSection('stock')"><span class="nav-icon">🚚</span> Stock Operations</li>
@@ -675,6 +675,7 @@
             await routeRef.set(sanitizedDay, { merge: true });
         } catch (err) {
             console.error("Firestore save error:", err);
+            alert("⚠️ Firestore Save Failed!\n\nError: " + err.message + "\n\nPlease check your internet connection.");
         }
     }
 
@@ -705,6 +706,9 @@
 
         // Step 2: Set up real-time listener on the per-day route document
         unsubscribeSnapshot = db.collection("routeDays").doc(date).onSnapshot(async (snap) => {
+            if (snap.metadata && snap.metadata.hasPendingWrites) {
+                return;
+            }
             if (snap.exists) {
                 globalDB[date] = normalizeRouteDay(snap.data(), currentCategory);
                 if (isSingleCategoryRoutePayload(snap.data())) {
@@ -743,6 +747,7 @@
             fullRender();
         }, (err) => {
             console.error("Firestore listener error:", err);
+            alert("⚠️ Firestore Listener Error: " + err.message);
         });
     }
 
