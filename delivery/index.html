@@ -555,6 +555,13 @@
 </main>
 </div> <!-- End App Wrapper -->
 
+<!-- Debug console for real-time diagnostics -->
+<div id="debugLog" style="position:fixed; bottom:0; left:0; right:0; max-height:150px; overflow-y:auto; background:rgba(0,0,0,0.9); color:#ff6b6b; font-family:monospace; font-size:11px; padding:10px; z-index:99999; display:none; border-top:2px solid #ef4444; box-shadow: 0 -4px 10px rgba(0,0,0,0.3);">
+    <strong>Debug Console:</strong>
+    <button onclick="document.getElementById('debugLog').style.display='none'" style="float:right; background:#ef4444; color:white; border:none; padding:2px 8px; border-radius:4px; cursor:pointer;">Close</button>
+    <div id="debugLogContent" style="margin-top:5px; white-space:pre-wrap;"></div>
+</div>
+
 <script>
     // Firebase Configuration (Required for local file:// access via Compat SDK)
     const firebaseConfig = {
@@ -569,6 +576,20 @@
     // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+
+    /* --- DEBUG CONSOLE LOGGER --- */
+    function showDebugError(msg) {
+        const el = document.getElementById('debugLog');
+        const content = document.getElementById('debugLogContent');
+        if (el && content) {
+            el.style.display = 'block';
+            content.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+        }
+    }
+    window.onerror = function(message, source, lineno, colno, error) {
+        showDebugError(`JS Error: ${message} at ${source}:${lineno}`);
+        return false;
+    };
 
     /* --- CONFIG --- */
     const DEFAULT_PRICES = { dosa: 45, appam: 55 };
@@ -675,6 +696,7 @@
             await routeRef.set(sanitizedDay, { merge: true });
         } catch (err) {
             console.error("Firestore save error:", err);
+            showDebugError("Firestore Save Error: " + err.message);
             alert("⚠️ Firestore Save Failed!\n\nError: " + err.message + "\n\nPlease check your internet connection.");
         }
     }
@@ -747,6 +769,7 @@
             fullRender();
         }, (err) => {
             console.error("Firestore listener error:", err);
+            showDebugError("Firestore Route Listener Error: " + err.message);
             alert("⚠️ Firestore Listener Error: " + err.message);
         });
     }
@@ -769,6 +792,9 @@
                 updateClientState(clients);
                 localStorage.setItem(CLIENT_DB_KEY, JSON.stringify(clients));
             }
+        }, (err) => {
+            console.error("Clients load error:", err);
+            showDebugError("Clients Load Error: " + err.message);
         });
     }
 
@@ -986,6 +1012,9 @@
                     tds.value = current;
                 }
             }
+        }, (err) => {
+            console.error("RouteMaster load error:", err);
+            showDebugError("RouteMaster Load Error: " + err.message);
         });
     }
 
@@ -1009,6 +1038,9 @@
                     tads.value = current;
                 }
             }
+        }, (err) => {
+            console.error("Staff load error:", err);
+            showDebugError("Staff Load Error: " + err.message);
         });
     }
 
