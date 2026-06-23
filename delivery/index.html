@@ -681,7 +681,7 @@
     }
 
     /* ---- FIRESTORE SAVE ---- */
-    async function saveData(obj = null) {
+    async function saveData() {
         lastSaveTime = Date.now();
         // 1. Update in-memory + localStorage cache immediately (fast / offline)
         if (!globalDB[selectedDate]) globalDB[selectedDate] = {};
@@ -691,7 +691,7 @@
         // 2. Write the current day to its own Firestore document
         try {
             const routeRef = db.collection("routeDays").doc(selectedDate);
-            const dataToSave = obj || normalizeRouteDay(globalDB[selectedDate], currentCategory);
+            const dataToSave = normalizeRouteDay(globalDB[selectedDate], currentCategory);
             const sanitizedDay = JSON.parse(JSON.stringify(dataToSave));
             await routeRef.set(sanitizedDay, { merge: true });
         } catch (err) {
@@ -1195,16 +1195,7 @@
         currentData.shops[shop][type][field] = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const obj = {
-            [currentCategory]: {
-                shops: {
-                    [shop]: currentData.shops[shop]
-                },
-                activeShops: currentData.activeShops
-            }
-        };
-
-        saveData(obj);
+        saveData();
         updateShopRowUI(shop); 
         
         const idx = SHOP_LIST.indexOf(shop);
@@ -1253,12 +1244,7 @@
         }
 
         if (driver) setGlobalDriver(driver);
-        const obj = {
-            [currentCategory]: {
-                trips: currentData.trips
-            }
-        };
-        saveData(obj);
+        saveData();
         resetTripForm();
         renderLogs();
         refreshDynamicUI();
@@ -1283,12 +1269,7 @@
     function deleteTrip(id) {
         if (!confirm("Delete this trip?")) return;
         currentData.trips = (currentData.trips || []).filter(t => t.id !== id);
-        const obj = {
-            [currentCategory]: {
-                trips: currentData.trips
-            }
-        };
-        saveData(obj);
+        saveData();
         resetTripForm();
         renderLogs();
         refreshDynamicUI();
@@ -1307,16 +1288,7 @@
         currentData.shops[shop].cashReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const obj = {
-            [currentCategory]: {
-                shops: {
-                    [shop]: currentData.shops[shop]
-                },
-                activeShops: currentData.activeShops
-            }
-        };
-
-        saveData(obj);
+        saveData();
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1335,16 +1307,7 @@
         currentData.shops[shop].gpayReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const obj = {
-            [currentCategory]: {
-                shops: {
-                    [shop]: currentData.shops[shop]
-                },
-                activeShops: currentData.activeShops
-            }
-        };
-
-        saveData(obj);
+        saveData();
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -1363,16 +1326,7 @@
         currentData.shops[shop].anandReceived = val;
         if(selectedDriver) currentData.shops[shop].driver = selectedDriver;
 
-        const obj = {
-            [currentCategory]: {
-                shops: {
-                    [shop]: currentData.shops[shop]
-                },
-                activeShops: currentData.activeShops
-            }
-        };
-
-        saveData(obj);
+        saveData();
         updateShopRowUI(shop); 
         updateShopBalance(shop, idx);
         refreshDynamicUI();
@@ -2009,15 +1963,7 @@
 
     function saveTallyData() {
         syncTally();
-        const obj = {
-            PACKET: {
-                tally: globalDB[selectedDate]['PACKET'].tally
-            },
-            LOOSE: {
-                tally: globalDB[selectedDate]['LOOSE'].tally
-            }
-        };
-        saveData(obj);
+        saveData();
     }
 
     function addExpense() {
